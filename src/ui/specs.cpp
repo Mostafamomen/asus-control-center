@@ -323,7 +323,7 @@ acc_specs_show (GtkWindow *parent)
       }
     add_status_row (sup, acc_tr (ACC_T_NIGHT), night, "display");
     add_status_row (sup, acc_tr (ACC_T_CAP_HELPER),
-                    g_file_test ("/usr/local/bin/acc-helper",
+                    g_file_test ("/usr/libexec/asus-control-center/acc-helper",
                                  G_FILE_TEST_IS_EXECUTABLE), "settings");
 
     GtkWidget *note = gtk_label_new (acc_tr (ACC_T_SUP_NOTE));

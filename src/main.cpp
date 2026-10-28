@@ -376,10 +376,10 @@ self_test (void)
       g_settings_schema_unref (sch);
   }
   {
-    gboolean ok = g_file_test ("/usr/local/bin/acc-helper",
+    gboolean ok = g_file_test ("/usr/libexec/asus-control-center/acc-helper",
                                G_FILE_TEST_IS_EXECUTABLE);
     r_cap (ok, "Polkit helper (writes)",
-           ok ? "/usr/local/bin/acc-helper installed"
+           ok ? "/usr/libexec/asus-control-center/acc-helper installed"
               : "run ./install.sh with sudo");
   }
 

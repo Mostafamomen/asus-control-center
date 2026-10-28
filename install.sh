@@ -6,8 +6,10 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 install_helper() {
-  echo "-> installing /usr/local/bin/acc-helper (whitelist-only helper)"
-  sudo install -m 0755 "$DIR/data/acc-helper" /usr/local/bin/acc-helper
+  echo "-> installing /usr/libexec/asus-control-center/acc-helper (whitelist-only helper)"
+  sudo install -d -m 0755 /usr/libexec/asus-control-center
+  sudo install -m 0755 "$DIR/data/acc-helper" /usr/libexec/asus-control-center/acc-helper
+  sudo rm -f /usr/local/bin/acc-helper
   echo "-> installing polkit policy"
   sudo install -m 0644 "$DIR/data/io.github.asuscontrolcenter.AsusControlCenter.policy" \
        /usr/share/polkit-1/actions/io.github.asuscontrolcenter.AsusControlCenter.policy
@@ -30,7 +32,8 @@ install_helper() {
 }
 
 uninstall_helper() {
-  sudo rm -f /usr/local/bin/acc-helper \
+  sudo rm -f /usr/libexec/asus-control-center/acc-helper \
+       /usr/local/bin/acc-helper \
        /usr/share/polkit-1/actions/io.github.asuscontrolcenter.AsusControlCenter.policy
   echo "OK — helper and policy removed."
   echo "   (asusd and asus-shutdown services left untouched)"

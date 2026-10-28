@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Every user-approved move (perf mode battery limit, gpu mux) goes through
- * `pkexec /usr/local/bin/acc-helper <action> <arg>`:
+ * `pkexec /usr/libexec/asus-control-center/acc-helper <action> <arg>`:
  *   - pkexec is the absolute /usr/bin/pkexec
  *   - the helper is whitelisted (fixed paths + fixed allowed values)
  *   - both are shipped in data/ and installed by install.sh
