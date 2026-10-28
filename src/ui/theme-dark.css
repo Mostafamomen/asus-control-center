@@ -1,0 +1,447 @@
+/* ACC theme — dark companion of the MyASUS-style skin
+ * (GTK4 / libadwaita 1.9), same class names as theme.css.
+ *
+ * Same palette, different roles: the canvas is #202939 (the light theme's
+ * text colour), text is #FFFFFF / #DCE7F5, and every blue is the same
+ * #006CE1 / #005BC4. Surfaces and borders are those palette colours with
+ * alpha instead of invented greys.
+ * Project asset, GPL-3.0-or-later. */
+
+/* ============ root ============ */
+window.background { background: #202939; }
+.accroot { background: #202939; }
+.accroot separator { min-width: 1px; background: rgba(220,231,245,0.16); }
+
+/* ============ header bar ============ */
+headerbar {
+  background: #202939; color: #FFFFFF;
+  border-bottom: 1px solid rgba(220,231,245,0.16);
+  box-shadow: none;
+}
+headerbar button { color: #DCE7F5; }
+
+/* ============ sidebar ============ */
+.acside {
+  background: rgba(255,255,255,0.04);
+  border-right: 1px solid rgba(220,231,245,0.16);
+}
+/* nothing inside the sidebar may paint its own page background over it */
+.acside scrolledwindow,
+.acside viewport,
+.acside listbox { background: transparent; }
+/* the app name beside the sidebar logo */
+.sidename { font-weight: 800; font-size: 12px; color: #FFFFFF; letter-spacing: 0.2px; }
+
+.acside .brand   { font-weight: 800; font-size: 15.5px; color: #FFFFFF; }
+.acside .tagline { font-size: 11px; color: rgba(220,231,245,0.62); }
+.acside .model   { font-size: 11px; color: rgba(220,231,245,0.72); font-weight: 600; }
+
+.acnav { background: transparent; }
+.acnav > row {
+  border-radius: 12px; margin: 2px 10px; min-height: 42px;
+  background: transparent; color: #DCE7F5;
+}
+.acnav > row:hover { background: rgba(255,255,255,0.06); }
+.acnav > row:selected {
+  background: rgba(0,108,225,0.22);
+  border-left: 3px solid #006CE1;
+  border-radius: 8px 12px 12px 8px;
+  color: #FFFFFF;
+  box-shadow: none;
+}
+.acnav > row:selected label { color: #FFFFFF; font-weight: 700; }
+.acnav > row:selected image { color: #FFFFFF; }
+
+/* sidebar group label ("DEVICES" / "PREFERENCES") */
+.acnav > row.navgrouprow {
+  background: transparent; min-height: 0; margin: 0; border-radius: 0;
+}
+.acnav > row.navgrouprow:hover { background: transparent; }
+.navgroup {
+  color: rgba(220,231,245,0.55); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.userchip {
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(220,231,245,0.16);
+  border-radius: 12px; padding: 7px 10px; margin: 8px 14px 10px;
+}
+.userchip label { color: #FFFFFF; font-weight: 700; font-size: 12px; }
+.userchip image { color: rgba(220,231,245,0.62); }
+
+/* ============ header bar ============ */
+.hbtitle  { font-weight: 800; font-size: 15px; color: #FFFFFF; }
+.hbsub    { font-size: 11px; color: rgba(220,231,245,0.62); font-weight: 600; }
+
+/* language toggle pill (header + settings row) */
+button.langpill {
+  background: rgba(0,108,225,0.16);
+  border: 1px solid rgba(0,108,225,0.55);
+  border-radius: 999px; padding: 6px 14px;
+  color: #DCE7F5; font-weight: 700; font-size: 12px;
+}
+button.langpill:hover { background: rgba(0,108,225,0.28); border-color: #006CE1; }
+
+/* flat icon buttons (serial copy, toast affirm, …) */
+button.flat {
+  background: transparent; border: none; box-shadow: none;
+  border-radius: 8px; padding: 5px; color: rgba(220,231,245,0.62); min-height: 0;
+}
+button.flat:hover { background: rgba(0,108,225,0.18); color: #FFFFFF; }
+
+/* filled primary call-to-action (MyASUS blue) */
+button.primarybtn {
+  background: #006CE1;
+  border: 1px solid #005BC4; border-radius: 12px;
+  padding: 7px 16px; color: #FFFFFF;
+  font-weight: 700; font-size: 12px;
+}
+button.primarybtn:hover { background: #005BC4; }
+button.primarybtn:active { background: #005BC4; }
+button.primarybtn:disabled {
+  background: rgba(220,231,245,0.12); border-color: transparent;
+  color: rgba(220,231,245,0.45);
+}
+
+/* greeting/user avatar badge */
+.avring {
+  background: rgba(0,108,225,0.18); border-radius: 999px; padding: 6px;
+  border: 1px solid rgba(0,108,225,0.45);
+}
+.avring image { color: #DCE7F5; }
+
+/* thin quiet scrollbars */
+scrollbar { background: transparent; }
+scrollbar slider {
+  background: rgba(220,231,245,0.22); border-radius: 999px;
+  min-width: 5px; min-height: 5px;
+}
+scrollbar slider:hover { background: rgba(220,231,245,0.38); }
+
+/* ============ hero banner (soft blue, light text) ============ */
+.achero {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(220,231,245,0.16);
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
+  padding: 22px 26px;
+  min-height: 118px;
+}
+/* Featured list inside the hero: one flat tint, no nesting of shadows */
+.featcard {
+  background: rgba(0,108,225,0.14);
+  border: 1px solid rgba(220,231,245,0.16);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.hero-title { font-weight: 800; font-size: 21px; color: #FFFFFF; }
+.hero-sub   { color: #DCE7F5; font-size: 13px; font-weight: 600; }
+.heropill {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(220,231,245,0.20);
+  border-radius: 999px; padding: 6px 14px;
+  color: #DCE7F5; font-size: 12.5px; font-weight: 700;
+}
+
+/* ============ device strip ============ */
+.chipbox {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(220,231,245,0.16);
+  border-radius: 16px; padding: 11px 16px;
+}
+.stripmodel { font-weight: 800; font-size: 14.5px; color: #FFFFFF; }
+.stripmodel-sub { color: rgba(220,231,245,0.62); font-size: 11.5px; font-weight: 600; }
+.chip {
+  border-radius: 8px; background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(220,231,245,0.16);
+  color: rgba(220,231,245,0.72); font-size: 11px; font-weight: 600;
+  padding: 3px 9px;
+}
+
+/* ============ cards ============ */
+.card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(220,231,245,0.16);
+  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
+  border-radius: 16px; padding: 15px 17px;
+}
+.cardtitle { font-weight: 800; font-size: 14.5px; color: #FFFFFF; }
+.cardicon  { color: #DCE7F5; }
+.dim  { color: rgba(220,231,245,0.62); font-size: 11.5px; }
+.val  { color: #FFFFFF; font-weight: 700; }
+.foot { color: rgba(220,231,245,0.55); font-size: 11px; }
+
+/* nvidia logo block (brand-accurate, unchanged in both themes) */
+.nvlogo {
+  background: #202939; border-radius: 9px;
+  border: 1px solid rgba(118, 185, 0, 0.7);
+}
+.nvlogo label { color: #76B900; font-weight: 900; font-size: 13px; }
+
+/* oled preview box: stays dark on purpose — it depicts the screen */
+.oledprev {
+  background: #202939;
+  border: 1px solid rgba(220,231,245,0.16);
+  border-radius: 11px;
+}
+.oledbadge {
+  background: rgba(32, 41, 57, 0.92); border-radius: 7px;
+  padding: 2px 10px; color: #FFFFFF; font-weight: 800; font-size: 11px;
+}
+
+/* status pills */
+.pill { border-radius: 999px; padding: 2px 12px;
+  background: rgba(0,108,225,0.22); color: #DCE7F5;
+  font-size: 11px; font-weight: 700; }
+separator.hsep { min-height: 1px; background: rgba(220,231,245,0.16); margin: 3px 0; }
+.pill.off { background: rgba(220,231,245,0.10); color: rgba(220,231,245,0.62); }
+
+.pill.on  { background: rgba(22,163,74,0.18); color: #16A34A; }
+.pill.soon { background: rgba(245,158,11,0.16); color: #F59E0B; }
+
+/* inline status box on control cards (queued GPU change, helper warnings) */
+.notice {
+  border-radius: 12px; padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(220,231,245,0.16);
+}
+.notice .noticehead { color: #FFFFFF; font-weight: 700; font-size: 12.5px; }
+.notice.info { background: rgba(0,108,225,0.16); border-color: rgba(0,108,225,0.45); }
+.notice.info .noticehead { color: #FFFFFF; }
+.notice.warn { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.45); }
+.notice.warn .noticehead { color: #FFFFFF; }
+
+/* outline action buttons */
+button.actionbtn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(220,231,245,0.20);
+  border-radius: 12px; padding: 7px 12px; color: #DCE7F5;
+  font-weight: 700; font-size: 12px;
+}
+button.actionbtn:hover { background: rgba(0,108,225,0.22); border-color: #006CE1; }
+button.actionbtn:disabled {
+  background: transparent; color: rgba(220,231,245,0.38);
+  border-color: rgba(220,231,245,0.12);
+}
+button.actionbtn:focus-visible { outline: 2px solid #006CE1; outline-offset: 1px; }
+
+/* selectable option cards (battery limits / perf / gpu / kbd levels) */
+checkbutton.optcard {
+  min-height: 34px;
+  padding: 7px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(220,231,245,0.16);
+  color: #DCE7F5;
+}
+checkbutton.optcard:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(220,231,245,0.28); color: #FFFFFF;
+}
+checkbutton.optcard:disabled {
+  color: rgba(220,231,245,0.35); background: transparent;
+  border-color: rgba(220,231,245,0.10);
+}
+checkbutton.optcard:checked {
+  background: rgba(0,108,225,0.28);
+  border-color: #006CE1;
+  color: #FFFFFF;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px #006CE1;
+}
+checkbutton.optcard:focus-visible {
+  outline: 2px solid #006CE1; outline-offset: 1px;
+}
+checkbutton.optcard > check {
+  min-width: 0; min-height: 0; margin: 0; padding: 0;
+  background: transparent; border: none; box-shadow: none;
+  -gtk-icon-shadow: none;
+}
+checkbutton.optcard { min-width: 90px; }
+/* compact variant: CPU-priority pills beside the MUX switch */
+checkbutton.optcard.compact {
+  min-width: 76px; min-height: 28px; padding: 4px 10px;
+  font-size: 11.5px;
+}
+/* CPU-priority row: hairline between the MUX control and the profile */
+.prio {
+  margin-top: 2px; padding-top: 9px;
+  border-top: 1px solid rgba(220,231,245,0.12);
+}
+
+/* quick apps rows */
+button.qrow {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(220,231,245,0.16);
+  border-radius: 12px; padding: 6px 10px; margin: 3px 0;
+}
+button.qrow:hover { background: rgba(0,108,225,0.20); }
+.qcap { color: rgba(220,231,245,0.55); font-size: 10.5px; }
+
+/* ============ controls (ASUS blue) ============ */
+scale trough { background: rgba(255,255,255,0.08); border-radius: 9px;
+  min-height: 6px; border: 1px solid rgba(220,231,245,0.16); }
+scale highlight { background: #006CE1; border-radius: 9px; }
+scale slider {
+  background: #FFFFFF; border-radius: 999px;
+  min-width: 15px; min-height: 15px; margin: -6px;
+  box-shadow: 0 1px 4px rgba(36, 65, 105, 0.40);
+  border: 1px solid rgba(220,231,245,0.30);
+}
+switch { border-radius: 999px; }
+switch slider { border-radius: 999px; background: #FFFFFF; }
+switch:checked { background: #006CE1; }
+progressbar trough { background: rgba(255,255,255,0.08); border-radius: 6px;
+  min-height: 6px; border: 1px solid rgba(220,231,245,0.16); }
+progressbar progress { background: #006CE1; border-radius: 6px; min-height: 6px; }
+
+/* ============ footer bar ============ */
+.footbar {
+  background: rgba(255,255,255,0.04);
+  border-top: 1px solid rgba(220,231,245,0.16);
+  padding: 5px 16px;
+}
+.footbar .asusword { font-weight: 900; font-size: 13px; color: #FFFFFF;
+  font-style: italic; }
+.footbar .slogan { font-size: 10px; color: rgba(220,231,245,0.55);
+  letter-spacing: 0.6px; }
+.footbar .leaf { color: #DCE7F5; font-size: 11px; font-weight: 600; }
+
+/* ============ MyASUS home band ============ */
+.serialval { color: #FFFFFF; font-size: 12.5px; font-weight: 700; }
+
+/* small uppercase section label (Featured / System info / Update) */
+.overline {
+  color: rgba(220,231,245,0.55); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px;
+}
+
+/* rounded blue-tinted icon badge on stat tiles */
+.iconbadge {
+  background: rgba(0,108,225,0.18);
+  border: 1px solid rgba(0,108,225,0.45);
+  border-radius: 8px; padding: 4px 5px;
+}
+.iconbadge image { color: #DCE7F5; }
+
+/* live battery readout on the laptop picture (assets/laptop.png) */
+.lapscreen-pct  {
+  color: #FFFFFF; font-size: 34px; font-weight: 800;
+  text-shadow: 0 2px 10px rgba(0, 91, 196, 0.6);
+}
+
+.tile {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(220,231,245,0.16);
+  border-top: 3px solid #006CE1;
+  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
+  border-radius: 16px;
+  padding: 14px 16px;
+  min-height: 112px;
+}
+.tile:hover {
+  border-color: rgba(220,231,245,0.28);
+  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
+}
+.tilehead { color: rgba(220,231,245,0.62); font-size: 12.5px; font-weight: 600; }
+.tileval  { font-size: 24px; font-weight: 800; color: #FFFFFF; }
+.tilesub  { font-size: 11.5px; color: rgba(220,231,245,0.62); }
+.tilehot  { color: #EF4444; }   /* disk used >= 90% */
+
+/* ============ Device-Settings-style section cards ============ */
+.accentcard {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(220,231,245,0.16);
+  border-left: 3px solid #006CE1;
+  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
+  border-radius: 16px;
+  padding: 20px 24px;
+}
+.sectionhead { font-weight: 800; font-size: 20px; color: #FFFFFF; }
+.warncare { color: #EF4444; font-size: 11.5px; font-weight: 600; }
+
+/* featured rows (home hero) */
+button.featrow {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(220,231,245,0.16);
+  border-radius: 12px; padding: 8px 12px;
+}
+button.featrow:hover { background: rgba(0,108,225,0.20); border-color: #006CE1; }
+button.featrow label { color: #DCE7F5; font-weight: 700; font-size: 12.5px; }
+button.featrow:hover label { color: #FFFFFF; }
+button.featrow image { color: rgba(220,231,245,0.62); }
+button.featrow:hover image { color: #FFFFFF; }
+
+/* ============ login page ============ */
+.loginroot { background: #202939; }
+.loginbrand {
+  background: #005BC4;
+  color: #FFFFFF;
+}
+.loginbrand .loginbrandtitle {
+  color: #FFFFFF; font-size: 23px; font-weight: 800;
+}
+.loginbrand .loginbrandsub {
+  color: rgba(255,255,255,0.90); font-size: 13px; font-weight: 600;
+}
+.loginbrand .loginbrandnote {
+  color: rgba(255,255,255,0.72); font-size: 11.5px;
+}
+.logincard {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(220,231,245,0.16);
+  border-radius: 16px;
+  padding: 26px 28px;
+  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
+}
+.logincard .loginhead { color: #FFFFFF; font-size: 22px; font-weight: 800; }
+.logincard .loginsub  { color: rgba(220,231,245,0.62); font-size: 12.5px; }
+.logincard .loginlabel {
+  color: #DCE7F5; font-size: 12px; font-weight: 700;
+}
+entry.loginentry {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(220,231,245,0.20);
+  border-radius: 12px;
+  padding: 9px 11px;
+  color: #FFFFFF;
+  min-height: 22px;
+}
+entry.loginentry:focus {
+  background: rgba(255,255,255,0.10);
+  border-color: #006CE1;
+  box-shadow: 0 0 0 3px rgba(0,108,225,0.30);
+}
+.logincheck label { color: #DCE7F5; font-size: 12px; }
+.loginerr { color: #EF4444; font-size: 12px; font-weight: 600; }
+button.loginlink {
+  background: transparent; border: none; box-shadow: none;
+  color: #DCE7F5; font-size: 12px; font-weight: 600; padding: 4px;
+}
+button.loginlink:hover { color: #FFFFFF; text-decoration: underline; }
+button.loginbtn { min-height: 38px; font-size: 13.5px; }
+.loginhint { color: rgba(220,231,245,0.55); font-size: 11px; }
+
+/* capability rows in the specifications dialog */
+.supkey { color: #DCE7F5; font-size: 12.5px; }
+.supok, .supno {
+  font-size: 10.5px; font-weight: 700;
+  padding: 2px 9px; border-radius: 99px;
+  border: 1px solid transparent;
+}
+.supok { color: #16A34A; background: rgba(22,163,74,0.16);
+         border-color: rgba(22,163,74,0.40); }
+.supno { color: rgba(220,231,245,0.55); background: rgba(220,231,245,0.08);
+         border-color: rgba(220,231,245,0.16); }
+button.suprow {
+  background: transparent; border: none; box-shadow: none;
+  padding: 4px 2px; border-radius: 8px;
+}
+button.suprow:hover { background: rgba(0,108,225,0.18); }
+button.suprow:hover .supkey { color: #FFFFFF; }
+.suparrow { color: rgba(220,231,245,0.55); }
+
+/* GPU badge border follows the detected vendor */
+.nvlogo.brand-nvidia { border-color: rgba(118, 185, 0, 0.7); }
+.nvlogo.brand-amd    { border-color: rgba(237, 28, 36, 0.65); }
+.nvlogo.brand-intel  { border-color: rgba(15, 125, 194, 0.65); }

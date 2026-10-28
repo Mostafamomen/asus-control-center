@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ASUS Control Center
+Comment=Laptop hardware dashboard for ASUS Vivobook Pro 15 (Linux)
+Exec=@BIN@/asus-control-center
+Icon=io.github.asuscontrolcenter.AsusControlCenter
+Categories=System;HardwareSettings;
+Keywords=asus;battery;gpu;oled;fan;brightness;vivobook;
+StartupNotify=true

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD POLICY 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+
+  <action id="io.github.asuscontrolcenter.helper">
+    <description>Run the ASUS Control Center hardware helper</description>
+    <description xml:lang="ar">تشغيل أداة أجهزة ASUS Control Center</description>
+    <message>ASUS Control Center wants to change a hardware setting (charge limit, performance mode, GPU mode, keyboard light)</message>
+    <message xml:lang="ar">يريد ASUS Control Center تغيير إعداد أجهزة (حد الشحن، وضع الأداء، وضع البطاقة الرسومية، إضاءة لوحة المفاتيح)</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policy.exec.path">/usr/local/bin/acc-helper</annotate>
+    <annotate key="org.freedesktop.policy.exec.allow_gui">true</annotate>
+  </action>
+
+</policyconfig>

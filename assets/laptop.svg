@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- assets/laptop.svg — original laptop illustration for the home hero.
+     Not an ASUS asset: a generic open-laptop drawing in the MyASUS blue
+     palette. GPL-3.0-or-later, same as the project. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <defs>
+    <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A586E"/>
+      <stop offset="0.55" stop-color="#2D3A4C"/>
+      <stop offset="1" stop-color="#1A2431"/>
+    </linearGradient>
+    <linearGradient id="deck" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FAFCFE"/>
+      <stop offset="0.5" stop-color="#E1E9F2"/>
+      <stop offset="1" stop-color="#BCC9D8"/>
+    </linearGradient>
+    <linearGradient id="scr" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A54C4"/>
+      <stop offset="0.5" stop-color="#1170E4"/>
+      <stop offset="1" stop-color="#4FA6FF"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.28" cy="0.22" r="0.95">
+      <stop offset="0" stop-color="#9CCBFF" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#9CCBFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- contact shadow under the base -->
+  <ellipse cx="300" cy="374" rx="212" ry="14" fill="#0F172A" opacity="0.15"/>
+  <ellipse cx="300" cy="370" rx="158" ry="8" fill="#0F172A" opacity="0.12"/>
+
+  <!-- lid -->
+  <rect x="100" y="68" width="400" height="268" rx="18"
+        fill="url(#lid)" stroke="#101822" stroke-width="2"/>
+
+  <!-- screen: centre of this rect is the centre of the canvas (300,200) -->
+  <rect x="112" y="80" width="376" height="240" rx="8" fill="url(#scr)"/>
+  <rect x="112" y="80" width="376" height="240" rx="8" fill="url(#glow)"/>
+  <rect x="112" y="80" width="376" height="240" rx="8" fill="url(#sheen)"/>
+
+  <!-- soft wallpaper shapes -->
+  <circle cx="438" cy="256" r="96" fill="#FFFFFF" opacity="0.06"/>
+  <circle cx="172" cy="116" r="58" fill="#FFFFFF" opacity="0.05"/>
+
+  <!-- webcam + chin detail -->
+  <circle cx="300" cy="74" r="2.6" fill="#0B1119"/>
+  <rect x="266" y="326" width="68" height="3.5" rx="1.75"
+        fill="#0B1119" opacity="0.55"/>
+
+  <!-- base / deck -->
+  <path d="M78 336 H522 Q534 336 537 346 L541 354 Q543 362 532 362
+           H68 Q57 362 59 354 L63 346 Q66 336 78 336 Z"
+        fill="url(#deck)" stroke="#AEBDCD" stroke-width="1.5"/>
+  <path d="M78 336 H522 Q534 336 537 346 L63 346 Q66 336 78 336 Z"
+        fill="#FFFFFF" opacity="0.55"/>
+  <rect x="248" y="340" width="104" height="4.5" rx="2.25"
+        fill="#A6B5C6" opacity="0.75"/>
+</svg>

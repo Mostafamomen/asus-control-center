@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASUS Control Center — عرض المشروع</title>
+<style>
+  :root{
+    --bg1:#050b1d; --bg2:#0a1836; --bg3:#10245c;
+    --blue:#3b7bff; --deep:#1241d8; --cyan:#39c5f3;
+    --text:#eaf2ff; --dim:#9fc0ff; --foot:#5f7bb4;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{
+    font-family:"Segoe UI","Noto Sans Arabic",Tahoma,sans-serif;
+    background:linear-gradient(135deg,var(--bg1) 0%,var(--bg2) 55%,var(--bg3) 100%);
+    color:var(--text); min-height:100vh;
+  }
+  header{
+    text-align:center; padding:48px 24px 8px;
+  }
+  header h1{
+    font-size:40px; font-weight:800;
+    background:linear-gradient(90deg,#7db4ff,#39c5f3);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  header p{color:var(--dim); margin-top:10px; font-size:17px}
+  .slide{
+    max-width:980px; margin:26px auto; padding:26px 30px;
+    background:rgba(13,25,52,.72); border:1px solid rgba(90,140,255,.18);
+    border-radius:20px;
+  }
+  .slide h2{
+    font-size:22px; color:#7db4ff; margin-bottom:14px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .slide h2 .n{
+    background:linear-gradient(135deg,var(--deep),var(--blue));
+    border-radius:10px; padding:2px 12px; font-size:16px; color:#fff;
+  }
+  .slide p,.slide li{color:var(--dim); line-height:1.9; font-size:15.5px}
+  .slide b{color:var(--text)}
+  ul{padding-inline-start:22px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px}
+  .card{
+    background:rgba(9,17,37,.85); border:1px solid rgba(90,140,255,.15);
+    border-radius:14px; padding:16px;
+  }
+  .card h3{color:var(--cyan); font-size:15px; margin-bottom:8px}
+  .pill{display:inline-block; border-radius:12px; padding:2px 12px; font-size:13px}
+  .on{background:rgba(34,178,125,.35); color:#9ff0cf}
+  .soon{background:rgba(255,255,255,.07); color:#91a8d8}
+  table{width:100%; border-collapse:collapse; margin-top:6px}
+  td{padding:9px 12px; border-bottom:1px solid rgba(90,140,255,.12); color:var(--dim); font-size:14.5px}
+  td:first-child{color:var(--text)}
+  footer{
+    text-align:center; color:var(--foot); font-size:13px; padding:26px;
+  }
+  code{
+    background:rgba(60,100,220,.25); border-radius:6px; padding:1px 8px;
+    color:#bfe0ff; font-size:14px; direction:ltr; unicode-bidi:embed;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ASUS Control Center</h1>
+  <p>مشروع مفتوح المصدر · بديل حي عن MyASUS لفيفوبوك برو 15 · GPL-3.0</p>
+  <p dir="ltr" style="font-size:14px">Open-source MyASUS alternative for Vivobook Pro 15 N6506CU (Fedora 44, GNOME)</p>
+</header>
+
+<div class="slide">
+  <h2><span class="n">1</span> لماذا هذا المشروع؟</h2>
+  <ul>
+    <li>MyASUS لا يعمل على لينكس — ولا نريد برمجيات مغلقة.</li>
+    <li><b>ACC</b> يعرض كل إحصائيات الجهاز بواجهة رسومية أنيقة تشبه نسخة ويندوز.</li>
+    <li>المرحلة الأولى <b>قراءة فقط</b>: لا صلاحيات ولا مربعات حوار كلمة مرور.</li>
+    <li>وحدة تحكم واحدة ✅ فعلية: خفض سطوع شاشة OLED بدون وميض.</li>
+  </ul>
+</div>
+
+<div class="slide">
+  <h2><span class="n">2</span> التقنيات</h2>
+  <div class="grid">
+    <div class="card"><h3>C + GTK4 + libadwaita</h3><p>واجهات أصلية لـ GNOME، خفيفة وسريعة، بدون تبعيات إضافية.</p></div>
+    <div class="card"><h3>sysfs + EDID + nvidia-smi</h3><p>كل قراءة من ملفات النظام الحقيقية — تم التحقق منها على جهازك فعلياً.</p></div>
+    <div class="card"><h3>GSettings bridge</h3><p>تكامل مع امتداد Soft-Brightness-Plus المثبت لديك لخفض السطوع.</p></div>
+    <div class="card"><h3>عربي/إنجليزي + RTL</h3><p>الواجهة تُبنى من اليمين لليسار مع ترجمة كاملة وزر تبديل فوري.</p></div>
+  </div>
+</div>
+
+<div class="slide">
+  <h2><span class="n">3</span> ما تعرفه اللوحة؟ (لوحة البيانات)</h2>
+  <ul>
+    <li>🎁 شريط ترحيب + شارات الجهاز: المعالج · RAM · RTX 4050 · شاشة OLED.</li>
+    <li>🔋 بطارية: 71% · 48/75 Wh · 444 دورة · حد الشحن (عرض فقط).</li>
+    <li>🎮 RTX 4050: الاسم، الاستخدام، الحرارة، الذاكرة (من nvidia-smi).</li>
+    <li>🖥️ شاشة OLED: 2880×1620 @120 Hz · مؤشّر سطوع + <span class="pill on">مُفعّل</span>.</li>
+    <li>🌀 مراوح + حرارة: رسم سير الحرارة لحظياً.</li>
+    <li>🚀 تطبيقات سريعة: إطلاق VS Code / Firefox / Terminal بنقرة.</li>
+  </ul>
+</div>
+
+<div class="slide">
+  <h2><span class="n">4</span> الأمان (نتيجة التدقيق)</h2>
+  <p>✅ <b>الاجتياز الكامل</b> — حتى الآن:</p>
+  <table>
+    <tr><td>sudo / pkexec / صلاحيات</td><td>لا يوجد إطلاقاً — التطبيق يعمل كمستخدم عادي</td></tr>
+    <tr><td>تنفيذ أوامر</td><td>أمر واحد ثابت بمسار مطلق — استحالة الحقن</td></tr>
+    <tr><td>الكتابة على النظام</td><td>مفتاح واحد فقط (سطوع OLED) في إعدادات المستخدم</td></tr>
+    <tr><td>القراءة</td><td>ملفات /proc و /sys فقط (إحصائيات)</td></tr>
+  </table>
+  <p style="margin-top:10px">المرحلة 2 (تحكم فعلي في اداء/بطاقة/مراوح) تتطلب <b>موافقتك</b> + وكيل polkit.</p>
+</div>
+
+<div class="slide">
+  <h2><span class="n">5</span> خط الطريق</h2>
+  <ul>
+    <li><b>M1 ✅ مكتمل:</b> تشخيصات ولوحة كاملة + خفض سطوع فوري.</li>
+    <li><b>M2:</b> حد الشحن (كتابة sysfs عبر polkit)، وضع GPU المختلط/المنفرد، أنماط الأداء.</li>
+    <li><b>M3:</b> صفحات خيارات كاملة، تحديث برنامج الجهاز (بيانات DMI للعرض فقط الآن).</li>
+    <li><b>M4:</b> تغليف Flatpak/RPM ونشر على GitHub.</li>
+  </ul>
+</div>
+
+<div class="slide">
+  <h2><span class="n">6</span> التشغيل</h2>
+  <p>من مجلد <code>asus-control-center</code>:</p>
+  <p dir="ltr" style="text-align:left"><code>make</code> — ترجمة · <code>./asus-control-center --self-test</code> — فحص قراءة فقط · <code>./asus-control-center</code> — فتح اللوحة</p>
+  <p style="margin-top:8px">زر <b>EN / ع</b> أعلى النافذة يبدّل اللغة والاتجاه فوراً.</p>
+</div>
+
+<footer>ASUS Control Center · GPL-3.0-or-later · built with 💙 for Fedora + GNOME</footer>
+</body>
+</html>

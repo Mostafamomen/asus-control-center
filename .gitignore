@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+__pycache__/
+*.py[cod]
+build/
+dist/
+target/
+asus-control-center

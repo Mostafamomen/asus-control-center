@@ -1,0 +1,132 @@
+#!/bin/bash
+# ASUS Control Center privileged helper — GPL-3.0-or-later
+#
+# Whitelist-only: every ACTION and every VALUE is hard-coded below.
+# No eval, no command substitution into a command line: the device paths
+# are discovered read-only and then used only as an output redirection
+# target. Exit codes: 0 ok, 4 firmware refused the value, 2 disallowed
+# value, 1 disallowed action, 3 modules still in use.
+
+set -u
+
+# --- portable device discovery (read-only) --------------------------------
+# Models differ in battery name (BAT0/BAT1/BATT), charge-limit file name and
+# WMI node; none of that changes the allowed actions or values.
+
+bat_dir() {
+  local d
+  for d in /sys/class/power_supply/*; do
+    [ -r "$d/type" ] || continue
+    [ "$(cat "$d/type" 2>/dev/null)" = "Battery" ] || continue
+    [ -e "$d/capacity" ] || continue
+    printf '%s\n' "$d"
+    return 0
+  done
+  return 1
+}
+
+charge_limit_file() {
+  local d f
+  d=$(bat_dir) || return 1
+  for f in charge_control_end_threshold charge_stop_threshold; do
+    if [ -e "$d/$f" ]; then
+      printf '%s\n' "$d/$f"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Kernel >= 6.17 moved the writable ASUS settings to the asus-armoury
+# firmware-attribute class. The old platform files may still exist but be
+# read-only or a dead alias, so the armoury copy always wins.
+armoury_file() {
+  local f="/sys/class/firmware-attributes/asus-armoury/attributes/$1/current_value"
+  [ -e "$f" ] && { printf '%s\n' "$f"; return 0; }
+  return 1
+}
+
+# write a whitelisted value and prove it stuck; exit 4 when the firmware
+# refuses it (some models expose the file but do not allow switching)
+set_val() {
+  local f="$1" v="$2"
+  echo "$v" > "$f" 2>/dev/null || return 4
+  [ "$(cat "$f" 2>/dev/null)" = "$v" ] || return 4
+  return 0
+}
+
+wmi_file() {
+  local name="$1" base
+  armoury_file "$name" && return 0
+  for base in /sys/devices/platform/asus-nb-wmi /sys/devices/platform/asus-wmi; do
+    if [ -e "$base/$name" ]; then
+      printf '%s\n' "$base/$name"
+      return 0
+    fi
+  done
+  for base in /sys/devices/platform/asus*; do
+    if [ -e "$base/$name" ]; then
+      printf '%s\n' "$base/$name"
+      return 0
+    fi
+  done
+  return 1
+}
+
+kbd_file() {
+  local d
+  for d in /sys/class/leds/*kbd_backlight*; do
+    if [ -e "$d/brightness" ]; then
+      printf '%s\n' "$d/brightness"
+      return 0
+    fi
+  done
+  return 1
+}
+
+case "$1" in
+
+  # battery health charging: charge limit (%)
+  set-charge)
+    case "$2" in
+      60|80|100) f=$(charge_limit_file) || exit 1
+                 set_val "$f" "$2" || exit 4 ;;
+      *) exit 2 ;;
+    esac ;;
+
+  # battery charging policy (0 std, 1 balanced, 2 max lifespan)
+  set-charge-mode)
+    case "$2" in
+      0|1|2) f=$(wmi_file charge_mode) || exit 1
+             set_val "$f" "$2" || exit 4 ;;
+      *) exit 2 ;;
+    esac ;;
+
+  # cpu performance profile (fallback for machines without asusd);
+  # verified by read-back like every other write
+  set-perf)
+    case "$2" in
+      quiet|balanced|performance)
+        set_val /sys/firmware/acpi/platform_profile "$2" || exit 4 ;;
+      *) exit 2 ;;
+    esac ;;
+
+  # gpu mux mode (1 hybrid, 0 ultimate/dGPU-only) — needs reboot
+  set-gpu-mux)
+    case "$2" in
+      0|1) f=$(wmi_file gpu_mux_mode) || exit 1
+           set_val "$f" "$2" || exit 4 ;;
+      *) exit 2 ;;
+    esac ;;
+
+  # keyboard backlight level 0..3
+  set-kbd)
+    case "$2" in
+      0|1|2|3) f=$(kbd_file) || exit 1
+               set_val "$f" "$2" || exit 4 ;;
+      *) exit 2 ;;
+    esac ;;
+
+  *) exit 1 ;;
+esac
+exit $?

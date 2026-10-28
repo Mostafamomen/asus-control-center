@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#202939" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="#006CE1"/>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="none"
+        stroke="#ffffff" stroke-opacity="0.22" stroke-width="3"/>
+
+  <g filter="url(#soft)">
+    <!-- dial: 270-degree ring with a bright needle -->
+    <path d="M78.5 177.5 A70 70 0 1 1 177.5 177.5" fill="none"
+          stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
+    <line x1="128" y1="128" x2="172" y2="90" stroke="#FFFFFF"
+          stroke-width="20" stroke-linecap="round"/>
+    <circle cx="128" cy="128" r="17" fill="#ffffff"/>
+    <circle cx="128" cy="128" r="7" fill="#006CE1"/>
+  </g>
+</svg>
