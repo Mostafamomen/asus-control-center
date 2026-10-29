@@ -1,0 +1,69 @@
+<schemalist gettext-domain="soft-brightness-plus">
+  <enum id="org.gnome.shell.extensions.soft-brightness-plus.monitors">
+    <value value="0" nick="all"/>
+    <value value="1" nick="built-in"/>
+    <value value="2" nick="external"/>
+  </enum>
+  <schema id="org.gnome.shell.extensions.soft-brightness-plus" path="/org/gnome/shell/extensions/soft-brightness-plus/">
+    <key name="use-backlight" type="b">
+      <default>false</default>
+      <summary>Use backlight control.</summary>
+      <description>Use the regular backlight control.</description>
+    </key>
+    <key name="monitors" enum="org.gnome.shell.extensions.soft-brightness-plus.monitors">
+      <default>"all"</default>
+      <summary>Monitors.</summary>
+      <description>The monitors whose brightness should be adjusted.</description>
+    </key>
+    <key name="builtin-monitor" type="s">
+      <default>""</default>
+      <summary>Builtin monitor.</summary>
+      <description>The name of the built-in monitor.</description>
+    </key>
+
+    <key name="min-brightness" type="d">
+      <range min="0" max="1"/>
+      <default>0.1</default>
+      <summary>Minimum brightness.</summary>
+      <description>Minimum brightness level.</description>
+    </key>
+    <key name="current-brightness" type="d">
+      <range min="0" max="1"/>
+      <default>1</default>
+      <summary>Current brightness level.</summary>
+      <description>The current brightness level.</description>
+    </key>
+    <key name="clone-mouse" type="b">
+      <default>true</default>
+      <summary>Mouse cursor brightness control.</summary>
+      <description>When enabled, the mouse cursor follows the
+      brightness setting. When disabled, the mouse cursor always
+      remains at full brightness. Controlling mouse cursor brightness
+      can sometimes show the wrong cursor and introduce cursor lag,
+      and may prevent the display from sleeping (the software cursor
+      loop keeps the screen active). Disable it if you encounter
+      cursor issues or if your computer stops sleeping. Note that
+      when other Gnome Shell components clone the mouse (like the
+      Zoom accessibility feature), this feature may not work correctly,
+      or there may be multiple cursors shown on the screen.
+      </description>
+    </key>
+    <key name="brightness-up" type="as">
+      <default>['&lt;Shift&gt;XF86MonBrightnessUp']</default>
+      <summary>Keyboard shortcut: increase brightness.</summary>
+      <description>Keyboard shortcut to increase the brightness by one step (5%).
+      Set to an empty list to disable.</description>
+    </key>
+    <key name="brightness-down" type="as">
+      <default>['&lt;Shift&gt;XF86MonBrightnessDown']</default>
+      <summary>Keyboard shortcut: decrease brightness.</summary>
+      <description>Keyboard shortcut to decrease the brightness by one step (5%).
+      Set to an empty list to disable.</description>
+    </key>
+    <key name="debug" type="b">
+      <default>false</default>
+      <summary>Debugging.</summary>
+      <description>Enable debugging for the extension.</description>
+    </key>
+  </schema>
+</schemalist>

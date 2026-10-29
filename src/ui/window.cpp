@@ -612,11 +612,10 @@ acc_ui_boot (GtkApplication *app)
     { "display-brightness-symbolic",    ACC_T_NAV_DISP, "display"     },
     { "applications-system-symbolic",   ACC_T_NAV_FANS, "performance" },
     { "org.gnome.Settings-symbolic",    ACC_T_NAV_SYS,  "system"      },
-    { "view-grid-symbolic",             ACC_T_NAV_APPS, "apps"        },
     { "emblem-system-symbolic",         ACC_T_NAV_SET,  "settings"    },
     { "help-about-symbolic",            ACC_T_SUPPORT,  "support"     },
   };
-  enum { NAV_DEV_END = 6 };   /* rows 0..6 belong to the "Devices" group */
+  enum { NAV_DEV_END = 5 };   /* rows 0..5 belong to the "Device settings" group */
   gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_DEV));
   for (guint i = 0; i <= NAV_DEV_END; i++)
     gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
@@ -640,7 +639,6 @@ acc_ui_boot (GtkApplication *app)
   gtk_stack_add_named (GTK_STACK (stack), acc_page_disp (ui), "display");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_perf (ui), "performance");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_sys (ui),  "system");
-  gtk_stack_add_named (GTK_STACK (stack), acc_page_apps (ui), "apps");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_settings (ui), "settings");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_support (ui), "support");
 

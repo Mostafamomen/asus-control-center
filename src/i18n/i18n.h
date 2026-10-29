@@ -107,6 +107,13 @@ typedef enum {
   ACC_T_CPU_PRIO, ACC_T_CPU_PRIO_HINT,
   /* sign-in hardening */
   ACC_T_LOGIN_ERR_LOCKED, ACC_T_LOGIN_ERR_ADMIN,
+  /* iGPU-only (Integrated) mode through supergfxctl */
+  ACC_T_GFX_HINT, ACC_T_GFX_NEED, ACC_T_GFX_START, ACC_T_GFX_MUX,
+  ACC_T_GFX_T, ACC_T_GFX_B, ACC_T_GFX_LOGOUT, ACC_T_GFX_REBOOT,
+  ACC_T_GFX_HYBRID_FIRST, ACC_T_GFX_AFTER_LOGOUT,
+  /* built-in OLED dimming (bundled Soft Brightness Plus) */
+  ACC_T_SD_INSTALL, ACC_T_SD_ENABLE, ACC_T_SD_HINT_MISSING,
+  ACC_T_SD_HINT_OFF, ACC_T_SD_DONE, ACC_T_SD_ENABLED, ACC_T_SD_FAIL,
   ACC_T_COUNT
 } AccStr;
 

@@ -13,7 +13,6 @@ GtkWidget *acc_page_gpu      (AccUI *u);
 GtkWidget *acc_page_disp     (AccUI *u);
 GtkWidget *acc_page_perf     (AccUI *u);
 GtkWidget *acc_page_sys      (AccUI *u);
-GtkWidget *acc_page_apps     (AccUI *u);
 GtkWidget *acc_page_settings (AccUI *u);
 GtkWidget *acc_page_support  (AccUI *u);
 

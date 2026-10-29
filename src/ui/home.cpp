@@ -1,8 +1,8 @@
 /* ui/home.c - dashboard page, laid out to match the approved mockup:
- * hero with real laptop photo, laptop chips strip, six cards
+ * hero with the laptop picture, laptop chips strip, six cards
  * (battery ring + limit slider/switch, GPU logo + green mode pill,
  * OLED preview + brightness slider + refresh row + eye-care pill,
- * system rows, fans ring + trend spark, quick apps with captions).
+ * system rows, fans ring + trend spark across two columns).
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "home.h"
@@ -381,7 +381,7 @@ card_oled (AccUI *u)
 }
 
 /* ------------------------------------------------------------------ */
-/* system + fans + quick apps                                          */
+/* system + fans                                                       */
 /* ------------------------------------------------------------------ */
 
 static GtkWidget *
@@ -464,80 +464,6 @@ card_fans (AccUI *u)
   return c;
 }
 
-typedef struct
-{
-  const gchar *icon;
-  const gchar *name;    /* app name shown bold            */
-  AccStr       cap;     /* localized caption (AccStr)     */
-  const gchar *path;    /* absolute; hidden if absent     */
-} QuickApp;
-
-static void
-launch_app (GtkButton *b, gpointer user)
-{
-  (void) b;
-  GError *err = NULL;
-  GSubprocessLauncher *l = g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_NONE);
-  GSubprocess *p = g_subprocess_launcher_spawn (l, &err, (const gchar *) user,
-                                                NULL);
-  g_object_unref (l);
-  if (!p)
-    {
-      acc_ui_toast (err ? err->message : "launch failed");
-      g_clear_error (&err);
-    }
-}
-
-static GtkWidget *
-card_quick (void)
-{
-  GtkWidget *c = card ("view-grid-symbolic", ACC_T_CARD_QUICK, NULL);
-  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 3);
-
-  QuickApp apps[] = {
-    { "applications-engineering-symbolic", "ArtCraft",   ACC_T_QA_TERM,  NULL },
-    { "visual-studio-code",  "VS Code",  ACC_T_QA_CODE, "/usr/bin/code" },
-    { "firefox",             "Firefox",  ACC_T_QA_FX,   "/usr/bin/firefox" },
-    { "utilities-terminal-symbolic", "Terminal", ACC_T_QA_TERM,
-      "/usr/bin/gnome-terminal" },
-    { "folder-symbolic",     "Files",    ACC_T_QA_FILES, "/usr/bin/nautilus" },
-  };
-  for (gsize i = 0; i < G_N_ELEMENTS (apps); i++)
-    {
-      if (apps[i].path && !acc_path_exists (apps[i].path))
-        continue;
-      GtkWidget *b = gtk_button_new ();
-      gtk_widget_add_css_class (b, "qrow");
-      GtkWidget *h = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
-      GtkWidget *im = gtk_image_new_from_icon_name (apps[i].icon);
-      gtk_image_set_pixel_size (GTK_IMAGE (im), 24);
-      gtk_widget_set_valign (im, GTK_ALIGN_CENTER);
-      GtkWidget *col = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
-      GtkWidget *t = lbl (apps[i].name, "val", 0);
-      gtk_widget_set_hexpand (t, TRUE);
-      gtk_box_append (GTK_BOX (col), t);
-      gtk_box_append (GTK_BOX (col), lbl (acc_tr (apps[i].cap), "qcap", 0));
-      gtk_box_append (GTK_BOX (h), im);
-      gtk_box_append (GTK_BOX (h), col);
-      {
-        GtkWidget *nx = gtk_image_new_from_icon_name ("go-next-symbolic");
-        gtk_widget_set_valign (nx, GTK_ALIGN_CENTER);
-        gtk_box_append (GTK_BOX (h), nx);
-      }
-      gtk_button_set_child (GTK_BUTTON (b), h);
-      if (apps[i].path)
-        g_signal_connect (b, "clicked", G_CALLBACK (launch_app),
-                          (gpointer) apps[i].path);
-      else
-        g_signal_connect (b, "clicked", G_CALLBACK (nav_btn), (gpointer) "gpu");
-      gtk_box_append (GTK_BOX (li), b);
-    }
-
-  gtk_box_append (GTK_BOX (li), go_btn (acc_tr (ACC_T_QUICK_ALL), "apps"));
-  gtk_box_append (GTK_BOX (c), li);
-  return c;
-}
-
 /* ------------------------------------------------------------------ */
 /* MyASUS-style home band                                              */
 /* ------------------------------------------------------------------ */
@@ -573,7 +499,7 @@ feat_row (const gchar *icon, const gchar *text, const gchar *page)
   return b;
 }
 
-/* Pick the laptop photo that matches this machine's model, if one exists.
+/* Pick the laptop picture that matches this machine's model, if one exists.
  * Falls back to the generic "laptop.png" when no specific image is found. */
 static gchar *
 laptop_image_for_model (void)
@@ -620,9 +546,10 @@ laptop_image_for_model (void)
   return g_strdup ("laptop.png");
 }
 
-/* ---- device picture: real laptop photo ------------------------------
- * A real ASUS laptop photo replaces the drawn mock. No overlay text —
- * the photo speaks for itself. */
+/* ---- device picture --------------------------------------------------
+ * An original laptop illustration (assets/laptop.svg rendered to PNG at
+ * 2x for HiDPI, no ASUS artwork). A per-model PNG can override it, see
+ * laptop_image_for_model(). No overlay text. */
 static GtkWidget *
 lap_mock (AccUI *u)
 {
@@ -646,7 +573,7 @@ lap_mock (AccUI *u)
   gtk_widget_set_vexpand (pic, TRUE);
   gtk_overlay_set_child (GTK_OVERLAY (ov), pic);
 
-  /* keep the photo's aspect ratio at every window size */
+  /* keep the picture's aspect ratio at every window size */
   GtkWidget *af = gtk_aspect_frame_new (0.5, 0.5, 940.0 / 600.0, TRUE);
   gtk_widget_set_hexpand (af, TRUE);
   gtk_widget_set_valign (af, GTK_ALIGN_CENTER);
@@ -743,7 +670,7 @@ acc_home_build (AccUI *u)
   }
   gtk_box_append (GTK_BOX (page), hero);
 
-  /* cards grid: 3 × 2 — the six quick actions */
+  /* cards grid: 3 × 2 — battery, GPU, display; system + wide fans card */
   GtkWidget *grid = gtk_grid_new ();
   gtk_grid_set_column_spacing (GTK_GRID (grid), 14);
   gtk_grid_set_row_spacing (GTK_GRID (grid), 14);
@@ -753,8 +680,7 @@ acc_home_build (AccUI *u)
   gtk_grid_attach (GTK_GRID (grid), card_gpu (u),      1, 0, 1, 1);
   gtk_grid_attach (GTK_GRID (grid), card_oled (u),     2, 0, 1, 1);
   gtk_grid_attach (GTK_GRID (grid), card_sys (u),      0, 1, 1, 1);
-  gtk_grid_attach (GTK_GRID (grid), card_fans (u),     1, 1, 1, 1);
-  gtk_grid_attach (GTK_GRID (grid), card_quick (),     2, 1, 1, 1);
+  gtk_grid_attach (GTK_GRID (grid), card_fans (u),     1, 1, 2, 1);
   gtk_box_append (GTK_BOX (page), grid);
 
   gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), page);

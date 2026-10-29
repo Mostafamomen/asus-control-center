@@ -12,6 +12,8 @@
 #include "user/user.h"
 #include "control/brightness.h"
 #include "control/asusd.h"
+#include "control/gfx.h"
+#include "control/softdim.h"
 #include "probe/probe.h"
 #include "probe/devs.h"
 #include "probe/battery.h"
@@ -340,6 +342,16 @@ self_test (void)
     g_free (f);
   }
   {
+    AccGfxState gx;
+    gboolean up = acc_gfx_state_sync (&gx);
+    r_cap (up && gx.can_integrated, "iGPU only (supergfxd)",
+           !gx.installed ? "supergfxctl not installed"
+           : !up ? "supergfxd not running"
+           : !gx.can_integrated ? "Integrated not offered"
+           : gx.mode == ACC_GFX_INTEGRATED ? "Integrated (active)"
+           : "Integrated available, finishes at logout");
+  }
+  {
     gchar *kbd = acc_dev_kbd_led_file ();
     gchar *v = kbd ? acc_read_trim (kbd) : NULL;
     r_cap (kbd != NULL, "Keyboard backlight",
@@ -358,10 +370,15 @@ self_test (void)
     g_free (t);
   }
   {
-    gboolean ok = acc_brightness_available ();
+    AccSoftDim sd = acc_softdim_status ();
+    gboolean ok = acc_brightness_available () && sd == ACC_SD_ON;
     gchar *d2 = ok
       ? g_strdup_printf ("current %.0f%%, min 10%%", acc_brightness_get ())
-      : g_strdup ("Soft Brightness Plus extension not installed");
+      : sd == ACC_SD_DISABLED
+      ? g_strdup ("Soft Brightness Plus installed but not enabled")
+      : g_strdup (acc_softdim_bundled ()
+                  ? "not installed (bundled copy ready: Display page)"
+                  : "Soft Brightness Plus extension not installed");
     r_cap (ok, "Software dimming", d2);
     g_free (d2);
   }

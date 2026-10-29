@@ -133,8 +133,8 @@ static const gchar *EN[ACC_T_COUNT] = {
   "Enabled now", "After restart",
   "Queued: ASUS applies it during shutdown, then restart to finish.",
   "Queued, but asus-shutdown.service is disabled, so the queue is lost on restart. Run: sudo systemctl enable --now asus-shutdown.service",
-  "Integrated only (Eco)",
-  "Not available: this firmware exposes no dgpu_disable attribute. Only Hybrid and Ultimate can be switched.",
+  "iGPU only (Eco)",
+  "Not available: supergfxd does not offer Integrated mode on this laptop.",
   "VRAM", "Power draw", "Display output",
   "NVIDIA is driving a display", "Display is wired to the integrated GPU",
   "Switch to Ultimate (panel on NVIDIA)?",
@@ -154,6 +154,25 @@ static const gchar *EN[ACC_T_COUNT] = {
   /* sign-in hardening */
   "Too many wrong attempts. Try again in %d seconds.",
   "Resetting the account needs the administrator password.",
+  /* iGPU-only (Integrated) mode */
+  "iGPU only turns the NVIDIA GPU off for the longest battery life. It finishes after you log out.",
+  "iGPU only needs supergfxctl: sudo dnf install supergfxctl, then sudo systemctl enable --now supergfxd.",
+  "iGPU only needs the supergfxd service. Run: sudo systemctl enable --now supergfxd",
+  "iGPU only needs Hybrid first: switch to Hybrid, restart, then choose iGPU only.",
+  "Switch to iGPU only?",
+  "The NVIDIA GPU is turned off and removed until you switch back, so apps that need it (games, CUDA, external displays wired to it) stop working. Save your work: the switch finishes when you log out.",
+  "Saved. Log out and back in to finish the switch.",
+  "Saved. Restart the laptop to finish the switch.",
+  "Switch back to Hybrid first, then choose Ultimate.",
+  "after you log out",
+  /* built-in OLED dimming */
+  "Turn on OLED dimming",
+  "Enable OLED dimming",
+  "Darkens the OLED panel below its lowest level without PWM flicker. The app installs the bundled Soft Brightness Plus extension (GPL-3) for your user only.",
+  "OLED dimming is installed but switched off.",
+  "OLED dimming installed. Log out and back in, then use the slider.",
+  "OLED dimming enabled. If the slider does nothing yet, log out and back in.",
+  "Could not set up OLED dimming. See the terminal for details.",
 };
 
 static const gchar *AR[ACC_T_COUNT] = {
@@ -285,7 +304,7 @@ static const gchar *AR[ACC_T_COUNT] = {
   "في الانتظار: تطبّقه ASUS عند الإغلاق، ثم أعد التشغيل لإكماله.",
   "تم وضعه في الانتظار، لكن asus-shutdown.service معطّلة، لذا سيُفقد عند إعادة التشغيل. نفّذ: sudo systemctl enable --now asus-shutdown.service",
   "المدمج فقط (Eco)",
-  "غير متاح: لا يوفّر هذا الإصدار من البرمجية الثابتة خاصية dgpu_disable. يمكن التبديل بين Hybrid وUltimate فقط.",
+  "غير متاح: لا يوفّر supergfxd وضع Integrated على هذا الحاسوب.",
   "ذاكرة الرسوميات", "استهلاك الطاقة", "إخراج الشاشة",
   "بطاقة NVIDIA تقود الشاشة", "الشاشة موصولة بكرت الرسوميات المدمج",
   "التبديل إلى Ultimate (اللوحة على NVIDIA)؟",
@@ -305,6 +324,25 @@ static const gchar *AR[ACC_T_COUNT] = {
   /* تقوية تسجيل الدخول */
   "محاولات خاطئة كثيرة. حاول مرة أخرى بعد %d ثانية.",
   "إعادة تعيين الحساب تتطلب كلمة مرور المسؤول.",
+  /* iGPU-only (Integrated) mode */
+  "وضع المدمج فقط يطفئ بطاقة NVIDIA لأطول عمر للبطارية. يكتمل بعد تسجيل الخروج.",
+  "وضع المدمج فقط يحتاج supergfxctl: نفّذ sudo dnf install supergfxctl ثم sudo systemctl enable --now supergfxd.",
+  "وضع المدمج فقط يحتاج خدمة supergfxd. نفّذ: sudo systemctl enable --now supergfxd",
+  "وضع المدمج فقط يحتاج Hybrid أولاً: بدّل إلى Hybrid وأعد التشغيل ثم اختر المدمج فقط.",
+  "التبديل إلى المدمج فقط؟",
+  "تُطفأ بطاقة NVIDIA وتُزال حتى تعود، فتتوقف التطبيقات التي تحتاجها (الألعاب وCUDA والشاشات الخارجية الموصولة بها). احفظ عملك: يكتمل التبديل عند تسجيل الخروج.",
+  "تم الحفظ. سجّل الخروج ثم الدخول لإكمال التبديل.",
+  "تم الحفظ. أعد تشغيل الحاسوب لإكمال التبديل.",
+  "عُد إلى Hybrid أولاً ثم اختر Ultimate.",
+  "بعد تسجيل الخروج",
+  /* التعتيم المدمج لشاشة OLED */
+  "تشغيل تعتيم OLED",
+  "تفعيل تعتيم OLED",
+  "يُعتّم شاشة OLED تحت أدنى مستوى لها دون وميض PWM. يثبّت التطبيق إضافة Soft Brightness Plus المرفقة (GPL-3) لحسابك فقط.",
+  "تعتيم OLED مثبّت لكنه متوقف.",
+  "تم تثبيت تعتيم OLED. سجّل الخروج ثم الدخول، ثم استخدم شريط التمرير.",
+  "تم تفعيل تعتيم OLED. إذا لم يعمل الشريط بعد، سجّل الخروج ثم الدخول.",
+  "تعذّر إعداد تعتيم OLED. راجع الطرفية للتفاصيل.",
 };
 
 /* count mismatch guard: arrays must both be exactly ACC_T_COUNT long */
