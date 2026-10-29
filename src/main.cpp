@@ -383,6 +383,10 @@ self_test (void)
               : "run ./install.sh with sudo");
   }
 
+  r_cap (acc_user_selftest (), "Sign-in password hashing",
+         acc_user_selftest () ? "PBKDF2-HMAC-SHA256 test vector OK"
+                              : "PBKDF2 test vector FAILED");
+
   g_print ("\nNotes\n");
   g_print ("  • Values marked — could not be read on this machine.\n");
   g_print ("  • Writes go through asusd or the polkit helper (no root here).\n");
@@ -439,7 +443,8 @@ main (int argc, char **argv)
     {
       self_test ();
       acc_brightness_shutdown ();
-      return 0;
+      /* non-zero so `make test` fails when the sign-in crypto is broken */
+      return acc_user_selftest () ? 0 : 1;
     }
 
   /* arabic is the default language of the project */

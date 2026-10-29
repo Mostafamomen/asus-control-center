@@ -96,7 +96,7 @@ static const gchar *EN[ACC_T_COUNT] = {
   "Username", "Password", "Confirm password",
   "Remember my username", "Sign in", "Create account",
   "Enter a username and password.",
-  "Use at least 4 characters.",
+  "Use at least 8 characters.",
   "The passwords do not match.",
   "Incorrect username or password.",
   "An account already exists on this computer.",
@@ -114,7 +114,7 @@ static const gchar *EN[ACC_T_COUNT] = {
   "Discrete GPU disable",
   "Night light",
   "Sign out",
-  "You stay signed in on this device until you sign out.",
+  "You stay signed in until you sign out or restart the computer.",
   "Stay signed in",
   "Collapse sidebar",
   "Expand sidebar",
@@ -151,6 +151,9 @@ static const gchar *EN[ACC_T_COUNT] = {
   /* CPU priority */
   "CPU priority",
   "Same live profile as Power & Performance — fans and power limits change now.",
+  /* sign-in hardening */
+  "Too many wrong attempts. Try again in %d seconds.",
+  "Resetting the account needs the administrator password.",
 };
 
 static const gchar *AR[ACC_T_COUNT] = {
@@ -244,7 +247,7 @@ static const gchar *AR[ACC_T_COUNT] = {
   "اسم المستخدم", "كلمة المرور", "تأكيد كلمة المرور",
   "تذكّر اسم المستخدم", "تسجيل الدخول", "إنشاء حساب",
   "أدخل اسم المستخدم وكلمة المرور.",
-  "استخدم 4 أحرف على الأقل.",
+  "استخدم 8 أحرف على الأقل.",
   "كلمتا المرور غير متطابقتين.",
   "اسم المستخدم أو كلمة المرور غير صحيحة.",
   "يوجد حساب بالفعل على هذا الكمبيوتر.",
@@ -262,7 +265,7 @@ static const gchar *AR[ACC_T_COUNT] = {
   "تعطيل كرت الرسوميات المنفصل",
   "إضاءة ليلية",
   "تسجيل الخروج",
-  "تبقى مسجّلاً على هذا الجهاز حتى تسجّل الخروج.",
+  "تبقى مسجّلاً حتى تسجّل الخروج أو تعيد تشغيل الحاسوب.",
   "البقاء مسجّلاً",
   "طيّ الشريط الجانبي",
   "توسيع الشريط الجانبي",
@@ -299,6 +302,9 @@ static const gchar *AR[ACC_T_COUNT] = {
   /* أولوية المعالج */
   "أولوية المعالج",
   "النمط نفسه المباشر في الطاقة والأداء — تتغيّر المراوح وحدود الطاقة فورًا.",
+  /* تقوية تسجيل الدخول */
+  "محاولات خاطئة كثيرة. حاول مرة أخرى بعد %d ثانية.",
+  "إعادة تعيين الحساب تتطلب كلمة مرور المسؤول.",
 };
 
 /* count mismatch guard: arrays must both be exactly ACC_T_COUNT long */

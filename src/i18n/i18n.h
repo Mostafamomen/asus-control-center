@@ -105,6 +105,8 @@ typedef enum {
   ACC_T_GPU_STEP3, ACC_T_GPU_CANCEL_Q, ACC_T_GPU_REVERT, ACC_T_GPU_CANCEL_OK,
   /* CPU priority on the GPU page (same firmware profiles as Power) */
   ACC_T_CPU_PRIO, ACC_T_CPU_PRIO_HINT,
+  /* sign-in hardening */
+  ACC_T_LOGIN_ERR_LOCKED, ACC_T_LOGIN_ERR_ADMIN,
   ACC_T_COUNT
 } AccStr;
 

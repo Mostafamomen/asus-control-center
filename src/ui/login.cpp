@@ -3,7 +3,7 @@
  *
  * First launch → "Create your account" (name, password, confirm).
  * Later launches → "Welcome back" with the remembered username prefilled.
- * The account lives only in settings.conf (salted SHA-256, see user.c).
+ * The account lives only in settings.conf (PBKDF2, see user.c).
  */
 #include "login.h"
 #include "window.h"
@@ -148,7 +148,7 @@ submit_cb (GtkButton *b, gpointer user)
           g_free (trimmed);
           return;
         }
-      if (strlen (pass) < 4)
+      if (g_utf8_strlen (pass, -1) < ACC_USER_MIN_PASS)
         {
           set_error (acc_tr (ACC_T_LOGIN_ERR_SHORT));
           g_free (trimmed);
@@ -169,9 +169,28 @@ submit_cb (GtkButton *b, gpointer user)
     }
   else
     {
+      gint wait = acc_user_lock_remaining ();
+      if (wait > 0)
+        {
+          gchar *msg = g_strdup_printf (acc_tr (ACC_T_LOGIN_ERR_LOCKED), wait);
+          set_error (msg);
+          g_free (msg);
+          gtk_editable_set_text (GTK_EDITABLE (L->pass), "");
+          g_free (trimmed);
+          return;
+        }
       if (!acc_user_check (trimmed, pass))
         {
-          set_error (acc_tr (ACC_T_LOGIN_ERR_WRONG));
+          wait = acc_user_lock_remaining ();
+          if (wait > 0)
+            {
+              gchar *msg = g_strdup_printf (acc_tr (ACC_T_LOGIN_ERR_LOCKED),
+                                            wait);
+              set_error (msg);
+              g_free (msg);
+            }
+          else
+            set_error (acc_tr (ACC_T_LOGIN_ERR_WRONG));
           gtk_editable_set_text (GTK_EDITABLE (L->pass), "");
           g_free (trimmed);
           return;
@@ -183,17 +202,49 @@ submit_cb (GtkButton *b, gpointer user)
   on_success ();
 }
 
+/* Reset deletes the account, so it must not be a way around the password:
+ * it asks for the administrator password through Polkit first. The generic
+ * pkexec action is auth_admin with no grace period, so it always prompts. */
 static void
-reset_cb (GtkButton *b, gpointer user)
+reset_auth_done (GObject *src, GAsyncResult *res, gpointer user)
 {
-  (void) b;
   (void) user;
+  GSubprocess *p = G_SUBPROCESS (src);
+  gboolean ok = g_subprocess_wait_check_finish (p, res, NULL);
+  g_object_unref (p);
+  if (!L || L->done)
+    return;
+  gtk_widget_set_sensitive (L->reset, TRUE);
+  if (!ok)
+    {
+      set_error (acc_tr (ACC_T_LOGIN_ERR_ADMIN));
+      return;
+    }
+
   acc_user_forget ();
   /* rebuild in create mode with an empty form */
   GtkApplication *app = L->app;
   L->done = TRUE;                 /* do not boot anything */
   gtk_window_destroy (GTK_WINDOW (L->win));
   acc_login_show (app);
+}
+
+static void
+reset_cb (GtkButton *b, gpointer user)
+{
+  (void) b;
+  (void) user;
+  const gchar *argv[] = { "/usr/bin/pkexec", "/usr/bin/true", NULL };
+  GError *e = NULL;
+  GSubprocess *p = g_subprocess_newv (argv, G_SUBPROCESS_FLAGS_NONE, &e);
+  if (!p)
+    {
+      g_clear_error (&e);
+      set_error (acc_tr (ACC_T_LOGIN_ERR_ADMIN));
+      return;
+    }
+  gtk_widget_set_sensitive (L->reset, FALSE);
+  g_subprocess_wait_check_async (p, NULL, reset_auth_done, NULL);
 }
 
 /* keep whatever the user already typed when switching EN/ع */
