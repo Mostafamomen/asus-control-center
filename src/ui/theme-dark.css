@@ -1,256 +1,274 @@
-/* ACC theme — dark companion of the MyASUS-style skin
- * (GTK4 / libadwaita 1.9), same class names as theme.css.
- *
- * Same palette, different roles: the canvas is #202939 (the light theme's
- * text colour), text is #FFFFFF / #DCE7F5, and every blue is the same
- * #006CE1 / #005BC4. Surfaces and borders are those palette colours with
- * alpha instead of invented greys.
- * Project asset, GPL-3.0-or-later. */
+/* ==========================================================================
+   ACC theme (dark) - MyASUS 4 look for GTK4 / libadwaita
+   --------------------------------------------------------------------------
+   Layout   Windows 11 style shell, as in MyASUS 4: one near-black chrome
+            (title bar + navigation rail on the same colour, no dividers),
+            the pages sit on a raised panel with a rounded top-left corner,
+            raised cards with 8 px corners and hairline borders,
+            pill-shaped blue buttons.
+   Type     Segoe UI (the face MyASUS renders with on Windows), falling
+            back to Inter / Noto Sans / Cantarell on Linux. Regular body,
+            semibold (600) titles - no heavy 800 weights.
+   Palette  chrome #1C1C1C   panel #202020   card #2B2B2B   border #3A3A3A
+            text #FFFFFF   secondary #ABABAB   accent #4CA0FF
+            accent fill #1F7AE0 / hover #3388EC
+            success #6CCB5F   warning #FCB040   danger #FF6B5E
+   MyASUS-inspired; not an official ASUS spec and ships no ASUS artwork.
+   Both skins share one layout: keep theme.css and
+   theme-dark.css in step (same selectors, different colours).
+   Project asset, GPL-3.0-or-later.
+   ========================================================================== */
+
+/* ============ type ============ */
+window, popover, dialog {
+  font-family: "Segoe UI Variable Text", "Segoe UI", "Inter",
+               "Noto Sans", "Cantarell", sans-serif;
+}
 
 /* ============ root ============ */
-window.background { background: #202939; }
-.accroot { background: #202939; }
-.accroot separator { min-width: 1px; background: rgba(220,231,245,0.16); }
+window.background { background: #1C1C1C; color: #FFFFFF; }
+.accroot { background: #1C1C1C; }
+.accroot separator { min-width: 1px; background: #353535; }
+/* sidebar and pages share one chrome: no line between them */
+.accroot separator.sidesep { min-width: 0; background: transparent; }
 
-/* ============ header bar ============ */
-headerbar {
-  background: #202939; color: #FFFFFF;
-  border-bottom: 1px solid rgba(220,231,245,0.16);
-  box-shadow: none;
+/* raised page panel, rounded where it meets the rail (MyASUS 4 frame) */
+.pagepanel {
+  background: #202020;
+  border-top: 1px solid #3A3A3A;
+  border-left: 1px solid #3A3A3A;
+  border-top-left-radius: 8px;
 }
-headerbar button { color: #DCE7F5; }
+/* Arabic (right-to-left): the rail is on the right, so mirror the frame */
+.pagepanel:dir(rtl) {
+  border-left: none;
+  border-right: 1px solid #3A3A3A;
+  border-top-left-radius: 0;
+  border-top-right-radius: 8px;
+}
 
-/* ============ sidebar ============ */
+/* ============ header bar (merged with the chrome) ============ */
+headerbar {
+  background: #1C1C1C; color: #FFFFFF;
+  border-bottom: none;
+  box-shadow: none;
+  min-height: 44px;
+}
+headerbar button { color: #FFFFFF; }
+
+/* ============ sidebar / navigation rail ============ */
 .acside {
-  background: rgba(255,255,255,0.04);
-  border-right: 1px solid rgba(220,231,245,0.16);
+  background: #1C1C1C;
+  border-right: none;
 }
 /* nothing inside the sidebar may paint its own page background over it */
 .acside scrolledwindow,
 .acside viewport,
 .acside listbox { background: transparent; }
 /* the app name beside the sidebar logo */
-.sidename { font-weight: 800; font-size: 12px; color: #FFFFFF; letter-spacing: 0.2px; }
+.sidename { font-weight: 600; font-size: 15px; color: #FFFFFF; }
 
-.acside .brand   { font-weight: 800; font-size: 15.5px; color: #FFFFFF; }
-.acside .tagline { font-size: 11px; color: rgba(220,231,245,0.62); }
-.acside .model   { font-size: 11px; color: rgba(220,231,245,0.72); font-weight: 600; }
+.acside .brand   { font-weight: 600; font-size: 15px; color: #FFFFFF; }
+.acside .tagline { font-size: 11px; color: #ABABAB; }
+.acside .model   { font-size: 11px; color: #ABABAB; }
 
 .acnav { background: transparent; }
 .acnav > row {
-  border-radius: 12px; margin: 2px 10px; min-height: 42px;
-  background: transparent; color: #DCE7F5;
+  border-radius: 6px; margin: 2px 8px; min-height: 40px;
+  background: transparent; color: #FFFFFF;
 }
-.acnav > row:hover { background: rgba(255,255,255,0.06); }
+.acnav > row label { font-size: 14px; }
+.acnav > row:hover { background: rgba(255, 255, 255, 0.06); }
+/* selected: soft fill + the short blue indicator on the left edge */
 .acnav > row:selected {
-  background: rgba(0,108,225,0.22);
-  border-left: 3px solid #006CE1;
-  border-radius: 8px 12px 12px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 3px 0 0 0 #4CA0FF;
+  border-radius: 6px;
   color: #FFFFFF;
-  box-shadow: none;
 }
-.acnav > row:selected label { color: #FFFFFF; font-weight: 700; }
-.acnav > row:selected image { color: #FFFFFF; }
+.acnav > row:selected:dir(rtl) { box-shadow: inset -3px 0 0 0 #4CA0FF; }
+.acnav > row:selected label { color: #FFFFFF; font-weight: 600; }
+.acnav > row:selected image { color: #4CA0FF; }
 
-/* sidebar group label ("DEVICES" / "PREFERENCES") */
+/* sidebar group label ("Device settings" / "Preferences") */
 .acnav > row.navgrouprow {
-  background: transparent; min-height: 0; margin: 0; border-radius: 0;
+  background: transparent; box-shadow: none;
+  min-height: 0; margin: 0; border-radius: 0;
 }
 .acnav > row.navgrouprow:hover { background: transparent; }
 .navgroup {
-  color: rgba(220,231,245,0.55); font-size: 10px; font-weight: 700;
-  letter-spacing: 1.5px;
+  color: #ABABAB; font-size: 12px; font-weight: 600;
 }
 
 .userchip {
-  background: rgba(255,255,255,0.05); border: 1px solid rgba(220,231,245,0.16);
-  border-radius: 12px; padding: 7px 10px; margin: 8px 14px 10px;
+  background: transparent; border: none;
+  border-top: 1px solid #353535;
+  border-radius: 0; padding: 10px 6px 4px; margin: 6px 14px 8px;
 }
-.userchip label { color: #FFFFFF; font-weight: 700; font-size: 12px; }
-.userchip image { color: rgba(220,231,245,0.62); }
+.userchip label { color: #FFFFFF; font-weight: 600; font-size: 13px; }
+.userchip image { color: #ABABAB; }
 
-/* ============ header bar ============ */
-.hbtitle  { font-weight: 800; font-size: 15px; color: #FFFFFF; }
-.hbsub    { font-size: 11px; color: rgba(220,231,245,0.62); font-weight: 600; }
+.hbtitle  { font-weight: 600; font-size: 14px; color: #FFFFFF; }
+.hbsub    { font-size: 12px; color: #ABABAB; }
 
 /* language toggle pill (header + settings row) */
 button.langpill {
-  background: rgba(0,108,225,0.16);
-  border: 1px solid rgba(0,108,225,0.55);
-  border-radius: 999px; padding: 6px 14px;
-  color: #DCE7F5; font-weight: 700; font-size: 12px;
+  background: #2B2B2B;
+  border: 1px solid #3A3A3A;
+  border-radius: 999px; padding: 4px 14px;
+  color: #FFFFFF; font-weight: 600; font-size: 12px;
 }
-button.langpill:hover { background: rgba(0,108,225,0.28); border-color: #006CE1; }
+button.langpill:hover { background: rgba(255, 255, 255, 0.06); border-color: #3A3A3A; }
 
-/* flat icon buttons (serial copy, toast affirm, …) */
+/* flat icon buttons (serial copy, toast affirm, ...) */
 button.flat {
   background: transparent; border: none; box-shadow: none;
-  border-radius: 8px; padding: 5px; color: rgba(220,231,245,0.62); min-height: 0;
+  border-radius: 6px; padding: 5px; color: #ABABAB; min-height: 0;
 }
-button.flat:hover { background: rgba(0,108,225,0.18); color: #FFFFFF; }
+button.flat:hover { background: rgba(255, 255, 255, 0.06); color: #FFFFFF; }
 
-/* filled primary call-to-action (MyASUS blue) */
+/* filled primary call-to-action: the MyASUS blue pill */
 button.primarybtn {
-  background: #006CE1;
-  border: 1px solid #005BC4; border-radius: 12px;
-  padding: 7px 16px; color: #FFFFFF;
-  font-weight: 700; font-size: 12px;
+  background: #1F7AE0;
+  border: none; border-radius: 999px;
+  padding: 7px 20px; color: #FFFFFF;
+  font-weight: 600; font-size: 13px;
+  box-shadow: none;
 }
-button.primarybtn:hover { background: #005BC4; }
-button.primarybtn:active { background: #005BC4; }
-button.primarybtn:disabled {
-  background: rgba(220,231,245,0.12); border-color: transparent;
-  color: rgba(220,231,245,0.45);
-}
+button.primarybtn:hover  { background: #3388EC; }
+button.primarybtn:active { background: #1868C2; }
+button.primarybtn:disabled { background: #3A3A3A; color: #ABABAB; }
 
 /* greeting/user avatar badge */
 .avring {
-  background: rgba(0,108,225,0.18); border-radius: 999px; padding: 6px;
-  border: 1px solid rgba(0,108,225,0.45);
+  background: rgba(76, 160, 255, 0.16); border-radius: 999px; padding: 6px;
+  border: none;
 }
-.avring image { color: #DCE7F5; }
+.avring image { color: #4CA0FF; }
 
 /* thin quiet scrollbars */
 scrollbar { background: transparent; }
 scrollbar slider {
-  background: rgba(220,231,245,0.22); border-radius: 999px;
-  min-width: 5px; min-height: 5px;
+  background: #5A5A5A; border-radius: 999px; min-width: 4px; min-height: 4px;
 }
-scrollbar slider:hover { background: rgba(220,231,245,0.38); }
+scrollbar slider:hover { background: #ABABAB; }
 
-/* ============ hero banner (soft blue, light text) ============ */
+/* ============ hero (device block on Home) ============ */
 .achero {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(220,231,245,0.16);
-  border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
-  padding: 22px 26px;
+  background: #2B2B2B;
+  border: 1px solid #3A3A3A;
+  border-radius: 8px;
+  box-shadow: none;
+  padding: 24px 28px;
   min-height: 118px;
 }
-/* Featured list inside the hero: one flat tint, no nesting of shadows */
+/* Featured list inside the hero */
 .featcard {
-  background: rgba(0,108,225,0.14);
-  border: 1px solid rgba(220,231,245,0.16);
-  border-radius: 12px;
+  background: #323232;
+  border: none;
+  border-radius: 8px;
   padding: 12px 14px;
 }
-.hero-title { font-weight: 800; font-size: 21px; color: #FFFFFF; }
-.hero-sub   { color: #DCE7F5; font-size: 13px; font-weight: 600; }
+.hero-title { font-weight: 600; font-size: 24px; color: #FFFFFF; }
+.hero-sub   { color: #ABABAB; font-size: 13px; }
 .heropill {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(220,231,245,0.20);
-  border-radius: 999px; padding: 6px 14px;
-  color: #DCE7F5; font-size: 12.5px; font-weight: 700;
+  background: transparent;
+  border: 1px solid #4CA0FF;
+  border-radius: 999px; padding: 6px 16px;
+  color: #4CA0FF; font-size: 13px; font-weight: 600;
 }
 
 /* ============ device strip ============ */
 .chipbox {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(220,231,245,0.16);
-  border-radius: 16px; padding: 11px 16px;
+  background: #2B2B2B;
+  border: 1px solid #3A3A3A;
+  border-radius: 8px; padding: 11px 16px;
 }
-.stripmodel { font-weight: 800; font-size: 14.5px; color: #FFFFFF; }
-.stripmodel-sub { color: rgba(220,231,245,0.62); font-size: 11.5px; font-weight: 600; }
+.stripmodel { font-weight: 600; font-size: 14px; color: #FFFFFF; }
+.stripmodel-sub { color: #ABABAB; font-size: 12px; }
 .chip {
-  border-radius: 8px; background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(220,231,245,0.16);
-  color: rgba(220,231,245,0.72); font-size: 11px; font-weight: 600;
-  padding: 3px 9px;
+  border-radius: 999px; background: #323232; border: none;
+  color: #ABABAB; font-size: 11px; font-weight: 600; padding: 3px 10px;
 }
 
 /* ============ cards ============ */
 .card {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(220,231,245,0.16);
-  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
-  border-radius: 16px; padding: 15px 17px;
+  background: #2B2B2B;
+  border: 1px solid #3A3A3A;
+  box-shadow: none;
+  border-radius: 8px; padding: 16px 18px;
 }
-.cardtitle { font-weight: 800; font-size: 14.5px; color: #FFFFFF; }
-.cardicon  { color: #DCE7F5; }
-.dim  { color: rgba(220,231,245,0.62); font-size: 11.5px; }
-.val  { color: #FFFFFF; font-weight: 700; }
-.foot { color: rgba(220,231,245,0.55); font-size: 11px; }
+.cardtitle { font-weight: 600; font-size: 15px; color: #FFFFFF; }
+.cardicon  { color: #4CA0FF; }
+.dim  { color: #ABABAB; font-size: 12px; }
+.val  { color: #FFFFFF; font-weight: 600; }
+.foot { color: #ABABAB; font-size: 11px; }
 
-/* nvidia logo block (brand-accurate, unchanged in both themes) */
+/* GPU logo block (vendor-coloured badge, same in both skins) */
 .nvlogo {
-  background: #202939; border-radius: 9px;
+  background: #1A1A1A; border-radius: 8px;
   border: 1px solid rgba(118, 185, 0, 0.7);
 }
-.nvlogo label { color: #76B900; font-weight: 900; font-size: 13px; }
+.nvlogo label { color: #76B900; font-weight: 700; font-size: 13px; }
 
-/* oled preview box: stays dark on purpose — it depicts the screen */
+/* oled preview box: stays dark on purpose - it depicts the screen */
 .oledprev {
-  background: #202939;
-  border: 1px solid rgba(220,231,245,0.16);
-  border-radius: 11px;
+  background: #1A1A1A;
+  border: 1px solid #3A3A3A;
+  border-radius: 8px;
 }
 .oledbadge {
-  background: rgba(32, 41, 57, 0.92); border-radius: 7px;
-  padding: 2px 10px; color: #FFFFFF; font-weight: 800; font-size: 11px;
+  background: rgba(26, 26, 26, 0.92); border-radius: 6px;
+  padding: 2px 10px; color: #FFFFFF; font-weight: 600; font-size: 11px;
 }
 
 /* status pills */
 .pill { border-radius: 999px; padding: 2px 12px;
-  background: rgba(0,108,225,0.22); color: #DCE7F5;
-  font-size: 11px; font-weight: 700; }
-separator.hsep { min-height: 1px; background: rgba(220,231,245,0.16); margin: 3px 0; }
-.pill.off { background: rgba(220,231,245,0.10); color: rgba(220,231,245,0.62); }
+  background: rgba(76, 160, 255, 0.16); color: #4CA0FF;
+  font-size: 11px; font-weight: 600; }
+separator.hsep { min-height: 1px; background: #353535; margin: 3px 0; }
+.pill.off  { background: #323232; color: #ABABAB; }
+.pill.on   { background: rgba(108, 203, 95, 0.14); color: #6CCB5F; }
+.pill.soon { background: rgba(252, 176, 64, 0.14); color: #FCB040; }
 
-.pill.on  { background: rgba(22,163,74,0.18); color: #16A34A; }
-.pill.soon { background: rgba(245,158,11,0.16); color: #F59E0B; }
-
-/* inline status box on control cards (queued GPU change, helper warnings) */
-.notice {
-  border-radius: 12px; padding: 10px 12px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(220,231,245,0.16);
-}
-.notice .noticehead { color: #FFFFFF; font-weight: 700; font-size: 12.5px; }
-.notice.info { background: rgba(0,108,225,0.16); border-color: rgba(0,108,225,0.45); }
-.notice.info .noticehead { color: #FFFFFF; }
-.notice.warn { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.45); }
-.notice.warn .noticehead { color: #FFFFFF; }
-
-/* outline action buttons */
+/* outline action buttons ("More details", "Battery details" ...) */
 button.actionbtn {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(220,231,245,0.20);
-  border-radius: 12px; padding: 7px 12px; color: #DCE7F5;
-  font-weight: 700; font-size: 12px;
+  background: #2B2B2B;
+  border: 1px solid #3A3A3A;
+  border-radius: 999px; padding: 6px 14px; color: #4CA0FF;
+  font-weight: 600; font-size: 13px;
+  box-shadow: none;
 }
-button.actionbtn:hover { background: rgba(0,108,225,0.22); border-color: #006CE1; }
+button.actionbtn:hover { background: #323232; border-color: #4CA0FF; }
 button.actionbtn:disabled {
-  background: transparent; color: rgba(220,231,245,0.38);
-  border-color: rgba(220,231,245,0.12);
+  background: #323232; color: #ABABAB; border-color: #3A3A3A;
 }
-button.actionbtn:focus-visible { outline: 2px solid #006CE1; outline-offset: 1px; }
+button.actionbtn:focus-visible { outline: 2px solid #4CA0FF; outline-offset: 1px; }
 
 /* selectable option cards (battery limits / perf / gpu / kbd levels) */
 checkbutton.optcard {
   min-height: 34px;
-  padding: 7px 14px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(220,231,245,0.16);
-  color: #DCE7F5;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #2B2B2B;
+  border: 1px solid #3A3A3A;
+  color: #FFFFFF;
 }
 checkbutton.optcard:hover:not(:disabled) {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(220,231,245,0.28); color: #FFFFFF;
+  background: #323232; border-color: #ABABAB; color: #FFFFFF;
 }
 checkbutton.optcard:disabled {
-  color: rgba(220,231,245,0.35); background: transparent;
-  border-color: rgba(220,231,245,0.10);
+  color: #ABABAB; background: #323232; border-color: #3A3A3A;
 }
 checkbutton.optcard:checked {
-  background: rgba(0,108,225,0.28);
-  border-color: #006CE1;
-  color: #FFFFFF;
-  font-weight: 700;
-  box-shadow: inset 0 0 0 1px #006CE1;
+  background: rgba(76, 160, 255, 0.16);
+  border-color: #4CA0FF;
+  color: #4CA0FF;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px #4CA0FF;
 }
 checkbutton.optcard:focus-visible {
-  outline: 2px solid #006CE1; outline-offset: 1px;
+  outline: 2px solid #4CA0FF; outline-offset: 1px;
 }
 checkbutton.optcard > check {
   min-width: 0; min-height: 0; margin: 0; padding: 0;
@@ -261,185 +279,190 @@ checkbutton.optcard { min-width: 90px; }
 /* compact variant: CPU-priority pills beside the MUX switch */
 checkbutton.optcard.compact {
   min-width: 76px; min-height: 28px; padding: 4px 10px;
-  font-size: 11.5px;
+  border-radius: 999px; font-size: 12px;
 }
 /* CPU-priority row: hairline between the MUX control and the profile */
 .prio {
   margin-top: 2px; padding-top: 9px;
-  border-top: 1px solid rgba(220,231,245,0.12);
+  border-top: 1px solid #353535;
 }
-
 /* quick apps rows */
 button.qrow {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(220,231,245,0.16);
-  border-radius: 12px; padding: 6px 10px; margin: 3px 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px; padding: 6px 8px; margin: 1px 0;
+  box-shadow: none;
 }
-button.qrow:hover { background: rgba(0,108,225,0.20); }
-.qcap { color: rgba(220,231,245,0.55); font-size: 10.5px; }
+button.qrow:hover { background: #323232; }
+.qcap { color: #ABABAB; font-size: 11px; }
 
 /* ============ controls (ASUS blue) ============ */
-scale trough { background: rgba(255,255,255,0.08); border-radius: 9px;
-  min-height: 6px; border: 1px solid rgba(220,231,245,0.16); }
-scale highlight { background: #006CE1; border-radius: 9px; }
+scale trough { background: #454545; border-radius: 999px; min-height: 4px;
+  border: none; }
+scale highlight { background: #4CA0FF; border-radius: 999px; }
 scale slider {
-  background: #FFFFFF; border-radius: 999px;
-  min-width: 15px; min-height: 15px; margin: -6px;
-  box-shadow: 0 1px 4px rgba(36, 65, 105, 0.40);
-  border: 1px solid rgba(220,231,245,0.30);
+  background: #4CA0FF; border-radius: 999px;
+  min-width: 18px; min-height: 18px; margin: -8px;
+  box-shadow: 0 0 0 4px #2B2B2B, 0 0 0 5px #3A3A3A;
+  border: none;
 }
 switch { border-radius: 999px; }
 switch slider { border-radius: 999px; background: #FFFFFF; }
-switch:checked { background: #006CE1; }
-progressbar trough { background: rgba(255,255,255,0.08); border-radius: 6px;
-  min-height: 6px; border: 1px solid rgba(220,231,245,0.16); }
-progressbar progress { background: #006CE1; border-radius: 6px; min-height: 6px; }
+switch:checked { background: #1F7AE0; }
+progressbar trough { background: #454545; border-radius: 999px; min-height: 6px;
+  border: none; }
+progressbar progress { background: #4CA0FF; border-radius: 999px; min-height: 6px; }
 
 /* ============ footer bar ============ */
 .footbar {
-  background: rgba(255,255,255,0.04);
-  border-top: 1px solid rgba(220,231,245,0.16);
-  padding: 5px 16px;
+  background: #1C1C1C;
+  border-top: none;
+  padding: 4px 16px;
 }
-.footbar .asusword { font-weight: 900; font-size: 13px; color: #FFFFFF;
+.footbar .asusword { font-weight: 700; font-size: 12px; color: #ABABAB;
   font-style: italic; }
-.footbar .slogan { font-size: 10px; color: rgba(220,231,245,0.55);
-  letter-spacing: 0.6px; }
-.footbar .leaf { color: #DCE7F5; font-size: 11px; font-weight: 600; }
+.footbar .slogan { font-size: 10px; color: #ABABAB; letter-spacing: 0.6px; }
+.footbar .leaf { color: #ABABAB; font-size: 11px; }
 
-/* ============ MyASUS home band ============ */
-.serialval { color: #FFFFFF; font-size: 12.5px; font-weight: 700; }
+/* ============ Home band ============ */
+.serialval { color: #FFFFFF; font-size: 13px; font-weight: 600; }
 
-/* small uppercase section label (Featured / System info / Update) */
+/* small section label (Featured / System info / Update) */
 .overline {
-  color: rgba(220,231,245,0.55); font-size: 10.5px; font-weight: 700;
-  letter-spacing: 1.6px;
+  color: #ABABAB; font-size: 12px; font-weight: 600;
 }
 
-/* rounded blue-tinted icon badge on stat tiles */
+/* rounded icon badge on stat tiles */
 .iconbadge {
-  background: rgba(0,108,225,0.18);
-  border: 1px solid rgba(0,108,225,0.45);
-  border-radius: 8px; padding: 4px 5px;
+  background: rgba(76, 160, 255, 0.16);
+  border: none;
+  border-radius: 8px; padding: 5px 6px;
 }
-.iconbadge image { color: #DCE7F5; }
+.iconbadge image { color: #4CA0FF; }
 
 /* live battery readout on the laptop picture (assets/laptop.png) */
 .lapscreen-pct  {
-  color: #FFFFFF; font-size: 34px; font-weight: 800;
-  text-shadow: 0 2px 10px rgba(0, 91, 196, 0.6);
+  color: #FFFFFF; font-size: 34px; font-weight: 600;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
+
+button.featrow {
+  background: transparent;
+  border: none;
+  border-radius: 6px; padding: 8px 10px;
+  box-shadow: none;
+}
+button.featrow:hover { background: #323232; }
+button.featrow label { color: #FFFFFF; font-size: 13px; }
+button.featrow:hover label { color: #4CA0FF; }
+button.featrow image { color: #ABABAB; }
+button.featrow:hover image { color: #4CA0FF; }
 
 .tile {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(220,231,245,0.16);
-  border-top: 3px solid #006CE1;
-  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
-  border-radius: 16px;
-  padding: 14px 16px;
+  background: #2B2B2B;
+  border: 1px solid #3A3A3A;
+  box-shadow: none;
+  border-radius: 8px;
+  padding: 16px 18px;
   min-height: 112px;
 }
-.tile:hover {
-  border-color: rgba(220,231,245,0.28);
-  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
-}
-.tilehead { color: rgba(220,231,245,0.62); font-size: 12.5px; font-weight: 600; }
-.tileval  { font-size: 24px; font-weight: 800; color: #FFFFFF; }
-.tilesub  { font-size: 11.5px; color: rgba(220,231,245,0.62); }
-.tilehot  { color: #EF4444; }   /* disk used >= 90% */
+.tile:hover { border-color: #4A4A4A; }
+.tilehead { color: #ABABAB; font-size: 13px; }
+.tileval  { font-size: 28px; font-weight: 600; color: #FFFFFF; }
+.tilesub  { font-size: 12px; color: #ABABAB; }
+.tilehot  { color: #FF6B5E; }   /* disk used >= 90% */
 
-/* ============ Device-Settings-style section cards ============ */
+/* ============ Device-Settings section cards ============ */
 .accentcard {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(220,231,245,0.16);
-  border-left: 3px solid #006CE1;
-  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
-  border-radius: 16px;
+  background: #2B2B2B;
+  border: 1px solid #3A3A3A;
+  box-shadow: none;
+  border-radius: 8px;
   padding: 20px 24px;
 }
-.sectionhead { font-weight: 800; font-size: 20px; color: #FFFFFF; }
-.warncare { color: #EF4444; font-size: 11.5px; font-weight: 600; }
+.sectionhead { font-weight: 600; font-size: 20px; color: #FFFFFF; }
+.warncare { color: #FF6B5E; font-size: 12px; font-weight: 600; }
 
-/* featured rows (home hero) */
-button.featrow {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(220,231,245,0.16);
-  border-radius: 12px; padding: 8px 12px;
+/* inline status box on control cards (queued GPU change, helper warnings) */
+.notice {
+  border-radius: 8px; padding: 10px 12px;
+  background: #323232;
+  border: 1px solid #3A3A3A;
 }
-button.featrow:hover { background: rgba(0,108,225,0.20); border-color: #006CE1; }
-button.featrow label { color: #DCE7F5; font-weight: 700; font-size: 12.5px; }
-button.featrow:hover label { color: #FFFFFF; }
-button.featrow image { color: rgba(220,231,245,0.62); }
-button.featrow:hover image { color: #FFFFFF; }
+.notice .noticehead { color: #FFFFFF; font-weight: 600; font-size: 13px; }
+.notice.info { background: rgba(76, 160, 255, 0.16); border-color: rgba(76, 160, 255, 0.35); }
+.notice.info .noticehead { color: #4CA0FF; }
+.notice.warn { background: rgba(252, 176, 64, 0.14); border-color: rgba(252, 176, 64, 0.40); }
+.notice.warn .noticehead { color: #FFFFFF; }
 
 /* ============ login page ============ */
-.loginroot { background: #202939; }
+.loginroot { background: #1C1C1C; }
 .loginbrand {
-  background: #005BC4;
+  background: #0B4FA8;
   color: #FFFFFF;
 }
 .loginbrand .loginbrandtitle {
-  color: #FFFFFF; font-size: 23px; font-weight: 800;
+  color: #FFFFFF; font-size: 26px; font-weight: 600;
 }
 .loginbrand .loginbrandsub {
-  color: rgba(255,255,255,0.90); font-size: 13px; font-weight: 600;
+  color: rgba(255,255,255,0.92); font-size: 14px;
 }
 .loginbrand .loginbrandnote {
-  color: rgba(255,255,255,0.72); font-size: 11.5px;
+  color: rgba(255,255,255,0.75); font-size: 12px;
 }
 .logincard {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(220,231,245,0.16);
-  border-radius: 16px;
-  padding: 26px 28px;
-  box-shadow: 0 4px 16px rgba(36, 65, 105, 0.40);
+  background: #2B2B2B;
+  border: 1px solid #3A3A3A;
+  border-radius: 8px;
+  padding: 28px 30px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
-.logincard .loginhead { color: #FFFFFF; font-size: 22px; font-weight: 800; }
-.logincard .loginsub  { color: rgba(220,231,245,0.62); font-size: 12.5px; }
+.logincard .loginhead { color: #FFFFFF; font-size: 24px; font-weight: 600; }
+.logincard .loginsub  { color: #ABABAB; font-size: 13px; }
 .logincard .loginlabel {
-  color: #DCE7F5; font-size: 12px; font-weight: 700;
+  color: #FFFFFF; font-size: 13px; font-weight: 600;
 }
 entry.loginentry {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(220,231,245,0.20);
-  border-radius: 12px;
-  padding: 9px 11px;
+  background: #2B2B2B;
+  border: 1px solid #3A3A3A;
+  border-bottom: 1px solid #9A9A9A;
+  border-radius: 6px;
+  padding: 8px 11px;
   color: #FFFFFF;
   min-height: 22px;
 }
 entry.loginentry:focus {
-  background: rgba(255,255,255,0.10);
-  border-color: #006CE1;
-  box-shadow: 0 0 0 3px rgba(0,108,225,0.30);
+  background: #2B2B2B;
+  border-color: #3A3A3A;
+  border-bottom: 2px solid #4CA0FF;
+  box-shadow: none;
 }
-.logincheck label { color: #DCE7F5; font-size: 12px; }
-.loginerr { color: #EF4444; font-size: 12px; font-weight: 600; }
+.logincheck label { color: #FFFFFF; font-size: 13px; }
+.loginerr { color: #FF6B5E; font-size: 12px; font-weight: 600; }
 button.loginlink {
   background: transparent; border: none; box-shadow: none;
-  color: #DCE7F5; font-size: 12px; font-weight: 600; padding: 4px;
+  color: #4CA0FF; font-size: 13px; font-weight: 600; padding: 4px;
 }
-button.loginlink:hover { color: #FFFFFF; text-decoration: underline; }
-button.loginbtn { min-height: 38px; font-size: 13.5px; }
-.loginhint { color: rgba(220,231,245,0.55); font-size: 11px; }
+button.loginlink:hover { color: #7DB9FF; text-decoration: underline; }
+button.loginbtn { min-height: 38px; font-size: 14px; }
+.loginhint { color: #ABABAB; font-size: 12px; }
 
 /* capability rows in the specifications dialog */
-.supkey { color: #DCE7F5; font-size: 12.5px; }
+.supkey { color: #FFFFFF; font-size: 13px; }
 .supok, .supno {
-  font-size: 10.5px; font-weight: 700;
-  padding: 2px 9px; border-radius: 99px;
+  font-size: 11px; font-weight: 600;
+  padding: 2px 10px; border-radius: 99px;
   border: 1px solid transparent;
 }
-.supok { color: #16A34A; background: rgba(22,163,74,0.16);
-         border-color: rgba(22,163,74,0.40); }
-.supno { color: rgba(220,231,245,0.55); background: rgba(220,231,245,0.08);
-         border-color: rgba(220,231,245,0.16); }
+.supok { color: #6CCB5F; background: rgba(108, 203, 95, 0.14); border-color: rgba(108, 203, 95, 0.35); }
+.supno { color: #ABABAB; background: #323232; border-color: #3A3A3A; }
 button.suprow {
   background: transparent; border: none; box-shadow: none;
-  padding: 4px 2px; border-radius: 8px;
+  padding: 4px 2px; border-radius: 6px;
 }
-button.suprow:hover { background: rgba(0,108,225,0.18); }
-button.suprow:hover .supkey { color: #FFFFFF; }
-.suparrow { color: rgba(220,231,245,0.55); }
+button.suprow:hover { background: #323232; }
+button.suprow:hover .supkey { color: #4CA0FF; }
+.suparrow { color: #ABABAB; }
 
 /* GPU badge border follows the detected vendor */
 .nvlogo.brand-nvidia { border-color: rgba(118, 185, 0, 0.7); }

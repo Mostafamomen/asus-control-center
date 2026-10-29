@@ -31,7 +31,7 @@ draw_cb (GtkDrawingArea *da, cairo_t *cr, int w, int h, gpointer user)
   if (dark)
     cairo_set_source_rgba (cr, 1, 1, 1, 0.12);
   else
-    cairo_set_source_rgba (cr, 0.10, 0.14, 0.20, 0.10);
+    cairo_set_source_rgba (cr, 0, 0, 0, 0.08);
   cairo_arc (cr, cx, cy, rad, 0, 2 * G_PI);
   cairo_stroke (cr);
   /* value arc: start at top, clockwise */
@@ -70,11 +70,11 @@ draw_cb (GtkDrawingArea *da, cairo_t *cr, int w, int h, gpointer user)
   double gap = 3.0;
   double total = (hasb ? bhpx : 0.0) + (hass ? gap + shpx : 0.0);
   double y = cy - total / 2.0;
-  /* #FFFFFF on the dark canvas, #202939 on the light one */
+  /* #FFFFFF on the dark canvas, #1A1A1A on the light one */
   if (dark)
     cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);         /* #FFFFFF */
   else
-    cairo_set_source_rgb (cr, 0.125, 0.161, 0.224);   /* #202939 */
+    cairo_set_source_rgb (cr, 0.102, 0.102, 0.102);   /* #1A1A1A */
   if (hasb)
     {
       cairo_move_to (cr, cx - bw / (PANGO_SCALE * 2.0), y);

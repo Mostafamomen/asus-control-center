@@ -173,12 +173,12 @@ acc_asset_path (const gchar *name)
 const gchar *
 acc_theme_col_accent (void)
 {
-  /* Shared palette for the light and dark skins. */
-  return "#006CE1";
+  /* MyASUS blue; the dark skin uses its lighter tint for contrast. */
+  return s_dark ? "#4CA0FF" : "#006CE1";
 }
 
 const gchar *
 acc_theme_col_warn (void)
 {
-  return "#F59E0B";
+  return s_dark ? "#FCB040" : "#F59E0B";
 }

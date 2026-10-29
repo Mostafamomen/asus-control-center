@@ -15,7 +15,7 @@ Reference for the Device Settings grouping: ASUS FAQ 1045651
 | Sign-in / account | **Login page first**: first run creates a local account (username + password), later runs sign in with the remembered username | salted SHA-256 stored in `settings.conf`; password never stored |
 | Top bar with app name + actions | Header bar: back arrow, theme button, language pill, refresh, menu | |
 | Left sidebar: device name, account chip | Sidebar: avatar + "Hello, {username}!", user chip at the bottom | uses the login name, no "Mostafa" placeholder |
-| Sidebar sections | `DEVICES` / `PREFERENCES` uppercase group labels | `.navgroup` CSS |
+| Sidebar sections | "Device settings" / "Preferences" group labels | `.navgroup` CSS |
 | Footer slogan | `ASUS · IN SEARCH OF INCREDIBLE` footer bar | |
 
 ## Home

@@ -69,7 +69,7 @@ static const gchar *EN[ACC_T_COUNT] = {
   "Cannot unload the NVIDIA driver now: the running desktop session is "
   "holding the GPU open. Log out and retry, or use a text console (TTY).",
   "Authorization dismissed — nothing was changed.",
-  "DEVICES", "PREFERENCES",
+  "Device settings", "Preferences",
   "Customer support",
   "Warranty, drivers and official ASUS service links.",
   "Download drivers",
@@ -220,7 +220,7 @@ static const gchar *AR[ACC_T_COUNT] = {
   "بالبطاقة الرسومية مفتوحة. قم بتسجيل الخروج وأعد المحاولة، أو "
   "استخدم طرفية نصية (TTY).",
   "أُلغي التفويض — لم يتغير شيء.",
-  "الأجهزة", "التفضيلات",
+  "إعدادات الجهاز", "التفضيلات",
   "دعم العملاء",
   "الضمان والتعريفات وروابط خدمة ASUS الرسمية.",
   "تنزيل التعريفات",

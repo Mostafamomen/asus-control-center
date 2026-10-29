@@ -53,7 +53,8 @@ static GtkCssProvider *g_theme = NULL;
 #define SIDE_CLOSED_W  68
 #define SIDE_MARK_PX   22
 static GtkWidget *g_side = NULL;        /* the sidebar box              */
-static GtkWidget *g_brandname = NULL;   /* app name under the logo      */
+static GtkWidget *g_brandname = NULL;   /* app name beside the logo     */
+static GtkWidget *g_brandbox  = NULL;   /* logo + app name row          */
 static GtkWidget *g_brandmark = NULL;   /* the drawn app mark           */
 static GtkWidget *g_uchip = NULL;       /* bottom user row              */
 static GtkWidget *g_collapse_img = NULL;/* the toggle button's icon     */
@@ -122,6 +123,9 @@ sidebar_apply (gboolean collapsed)
                               !collapsed);
   if (g_brandname)
     gtk_widget_set_visible (g_brandname, !collapsed);
+  if (g_brandbox)
+    gtk_widget_set_halign (g_brandbox,
+                           collapsed ? GTK_ALIGN_CENTER : GTK_ALIGN_START);
   if (g_uchip)
     gtk_widget_set_visible (g_uchip, !collapsed);
   if (g_collapse_img)
@@ -568,12 +572,15 @@ acc_ui_boot (GtkApplication *app)
   g_side = side;
   gtk_widget_set_size_request (side, SIDE_OPEN_W, -1);
 
-  /* sidebar brand block: small logo mark with the app name underneath
-   * (no personal greeting) */
-  GtkWidget *greet = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-  gtk_widget_set_halign (greet, GTK_ALIGN_CENTER);
-  gtk_widget_set_margin_top (greet, 14);
-  gtk_widget_set_margin_bottom (greet, 12);
+  /* sidebar brand block, MyASUS style: logo mark with the app name beside
+   * it, top-left of the navigation rail (no personal greeting) */
+  GtkWidget *greet = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
+  g_brandbox = greet;
+  gtk_widget_set_halign (greet, GTK_ALIGN_START);
+  gtk_widget_set_margin_top (greet, 10);
+  gtk_widget_set_margin_bottom (greet, 14);
+  gtk_widget_set_margin_start (greet, 20);
+  gtk_widget_set_margin_end (greet, 20);
   {
     /* app mark: the dial, drawn by the UI kit at an exact pixel size
      * (a bitmap GtkPicture kept its 256 px natural size and ignored the
@@ -585,10 +592,10 @@ acc_ui_boot (GtkApplication *app)
   {
     GtkWidget *name = lbl_x ("ASUS Control Center", "sidename", 0, FALSE);
     g_brandname = name;
-    gtk_label_set_xalign (GTK_LABEL (name), 0.5f);
+    gtk_label_set_xalign (GTK_LABEL (name), 0.0f);
     gtk_label_set_ellipsize (GTK_LABEL (name), PANGO_ELLIPSIZE_END);
     gtk_label_set_max_width_chars (GTK_LABEL (name), 22);
-    gtk_widget_set_halign (name, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign (name, GTK_ALIGN_CENTER);
     gtk_box_append (GTK_BOX (greet), name);
   }
   gtk_box_append (GTK_BOX (side), greet);
@@ -624,6 +631,9 @@ acc_ui_boot (GtkApplication *app)
   gtk_stack_set_transition_type (GTK_STACK (stack),
                                  GTK_STACK_TRANSITION_TYPE_CROSSFADE);
   gtk_widget_set_hexpand (stack, TRUE);
+  /* pages sit on a raised panel with a rounded corner (MyASUS 4 frame) */
+  gtk_widget_add_css_class (stack, "pagepanel");
+  gtk_widget_set_overflow (stack, GTK_OVERFLOW_HIDDEN);
   gtk_stack_add_named (GTK_STACK (stack), acc_home_build (ui), "home");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_bat (ui),  "battery");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_gpu (ui),  "gpu");
@@ -638,7 +648,7 @@ acc_ui_boot (GtkApplication *app)
   sidebar_load_pref ();
 
   g_signal_connect (nav, "row-selected", G_CALLBACK (on_nav), stack);
-  /* first *selectable* row is now index 1 (index 0 is the "DEVICES" label) */
+  /* first *selectable* row is now index 1 (index 0 is the "Device settings" label) */
   GtkListBoxRow *first = gtk_list_box_get_row_at_index (nav, 1);
   if (first)
     gtk_list_box_select_row (nav, first);
@@ -670,6 +680,7 @@ acc_ui_boot (GtkApplication *app)
   gtk_box_append (GTK_BOX (side), uchip);
 
   GtkWidget *sep = gtk_separator_new (GTK_ORIENTATION_VERTICAL);
+  gtk_widget_add_css_class (sep, "sidesep");
   gtk_box_append (GTK_BOX (body), side);
   gtk_box_append (GTK_BOX (body), sep);
   gtk_box_append (GTK_BOX (body), stack);
@@ -724,6 +735,7 @@ acc_ui_destroy (void)
   acc_page_teardown ();
   g_side = NULL;
   g_brandname = NULL;
+  g_brandbox = NULL;
   g_brandmark = NULL;
   g_uchip = NULL;
   g_collapse_img = NULL;
