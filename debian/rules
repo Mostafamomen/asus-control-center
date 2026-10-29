@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+include /usr/share/dpkg/pkg-info.mk
+
+APP_ID = io.github.asuscontrolcenter.AsusControlCenter
+PKGDIR = debian/asus-control-center
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	dh_auto_build -- VERSION=$(DEB_VERSION_UPSTREAM)
+
+# --self-test reads real laptop hardware, so check the metadata instead.
+override_dh_auto_test:
+
+override_dh_auto_install:
+	dh_auto_install -- VERSION=$(DEB_VERSION_UPSTREAM)
+	desktop-file-validate $(PKGDIR)/usr/share/applications/$(APP_ID).desktop
+	appstreamcli validate --no-net $(PKGDIR)/usr/share/metainfo/$(APP_ID).metainfo.xml

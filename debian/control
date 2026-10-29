@@ -1,0 +1,33 @@
+Source: asus-control-center
+Section: utils
+Priority: optional
+Maintainer: Mostafa Momen <mostafamomen6521@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               pkgconf,
+               libgtk-4-dev,
+               libadwaita-1-dev (>= 1.5),
+               desktop-file-utils,
+               appstream
+Standards-Version: 4.7.0
+Homepage: https://github.com/Mostafamomen/asus-control-center
+Vcs-Browser: https://github.com/Mostafamomen/asus-control-center
+Vcs-Git: https://github.com/Mostafamomen/asus-control-center.git
+Rules-Requires-Root: no
+
+Package: asus-control-center
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         pkexec | policykit-1,
+         hicolor-icon-theme
+Recommends: asusctl, supergfxctl, iw
+Suggests: gnome-shell
+Description: battery, performance, GPU and display controls for ASUS laptops
+ ASUS Control Center is a community-built GTK 4 / libadwaita app that brings
+ the hardware information and controls of an ASUS laptop into one window:
+ battery charge limits, performance profiles, GPU MUX and iGPU-only modes,
+ keyboard lighting, fan and temperature monitoring, and OLED-friendly
+ display dimming. It is not affiliated with or endorsed by ASUS.
+ .
+ Privileged changes go through a small whitelist-only helper run with
+ pkexec, so no part of the app runs as root.

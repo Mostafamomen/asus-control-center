@@ -10,3 +10,16 @@ build/
 dist/
 target/
 asus-control-center
+
+# packaging output
+/dist/
+*.rpm
+*.deb
+*.ddeb
+/debian/.debhelper/
+/debian/asus-control-center/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.substvars
+/debian/*.debhelper.log
+/asus-control-center-*.tar.gz

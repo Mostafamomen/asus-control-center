@@ -1,0 +1,50 @@
+name: Compatibility report
+description: Tell us how ASUS Control Center works on your laptop
+labels: [compatibility]
+body:
+  - type: input
+    id: model
+    attributes:
+      label: Exact model code
+      description: From `cat /sys/class/dmi/id/product_name`, e.g. "Vivobook Pro 15 N6506CU"
+    validations:
+      required: true
+  - type: input
+    id: bios
+    attributes:
+      label: BIOS version
+      description: From `cat /sys/class/dmi/id/bios_version`
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and kernel
+      description: e.g. "Fedora 44, 6.17.4" (`uname -r`)
+    validations:
+      required: true
+  - type: dropdown
+    id: asusd
+    attributes:
+      label: Is asusd installed and running?
+      options: ["Yes", "Installed, not running", "No", "Don't know"]
+  - type: checkboxes
+    id: works
+    attributes:
+      label: Controls that actually changed the hardware
+      description: Tick only what you tested and saw take effect.
+      options:
+        - label: Battery charge limit
+        - label: Performance profile
+        - label: GPU mode (MUX / iGPU-only)
+        - label: Keyboard backlight
+        - label: Display backlight / OLED dimming
+        - label: Fan and temperature readings
+  - type: textarea
+    id: report
+    attributes:
+      label: Output of `asus-control-center --specs`
+      description: Remove the serial number before posting.
+      render: text
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything that did not work

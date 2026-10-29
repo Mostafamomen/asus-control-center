@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: CC0-1.0 -->
+<component type="desktop-application">
+  <id>io.github.asuscontrolcenter.AsusControlCenter</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>ASUS Control Center</name>
+  <summary>Battery, performance, GPU and display controls for ASUS laptops</summary>
+  <developer id="io.github.mostafamomen">
+    <name>Mostafa Momen</name>
+  </developer>
+  <description>
+    <p>
+      ASUS Control Center is a community-built app that brings the hardware
+      information and controls of an ASUS laptop into one window. It is not
+      affiliated with or endorsed by ASUS.
+    </p>
+    <ul>
+      <li>Battery charge limits and charging modes</li>
+      <li>Quiet, Balanced and Performance profiles</li>
+      <li>GPU MUX switching and iGPU-only mode</li>
+      <li>Keyboard backlight and touchpad controls</li>
+      <li>Fan, temperature and GPU monitoring</li>
+      <li>OLED-friendly display dimming and eye-care modes</li>
+    </ul>
+    <p>
+      Privileged changes go through a small whitelist-only helper run with
+      pkexec. Controls your laptop does not expose stay disabled.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.asuscontrolcenter.AsusControlCenter.desktop</launchable>
+  <url type="homepage">https://github.com/Mostafamomen/asus-control-center</url>
+  <url type="bugtracker">https://github.com/Mostafamomen/asus-control-center/issues</url>
+  <url type="vcs-browser">https://github.com/Mostafamomen/asus-control-center</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Home</caption>
+      <image>https://raw.githubusercontent.com/Mostafamomen/asus-control-center/main/docs/screenshots/light/home.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Battery health charging</caption>
+      <image>https://raw.githubusercontent.com/Mostafamomen/asus-control-center/main/docs/screenshots/light/battery.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>GPU mode</caption>
+      <image>https://raw.githubusercontent.com/Mostafamomen/asus-control-center/main/docs/screenshots/light/gpu.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Dark style</caption>
+      <image>https://raw.githubusercontent.com/Mostafamomen/asus-control-center/main/docs/screenshots/dark/home.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <categories>
+    <category>System</category>
+    <category>HardwareSettings</category>
+  </categories>
+  <keywords>
+    <keyword>asus</keyword>
+    <keyword>battery</keyword>
+    <keyword>gpu</keyword>
+    <keyword>oled</keyword>
+  </keywords>
+  <releases>
+    <release version="0.4.0" date="2026-10-29">
+      <description>
+        <p>First packaged release, with RPM and Debian packages.</p>
+        <ul>
+          <li>Separate hardware backlight slider next to OLED dimming</li>
+          <li>iGPU-only mode via supergfxd</li>
+          <li>OLED dimming via the bundled Soft Brightness Plus extension</li>
+          <li>Layout, colours and fonts in the style of MyASUS</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>

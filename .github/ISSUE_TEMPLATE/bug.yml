@@ -1,0 +1,33 @@
+name: Bug report
+description: Something is broken or behaves wrongly
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: input
+    id: version
+    attributes:
+      label: App version and how you installed it
+      description: e.g. "0.4.0, .rpm from Releases" or "built from source at <commit>"
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Laptop model, distribution and kernel
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Terminal output
+      description: Run `ACC_DEBUG=1 asus-control-center` and paste what it prints.
+      render: text

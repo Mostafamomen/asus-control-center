@@ -1,0 +1,47 @@
+.TH ASUS-CONTROL-CENTER 1 "October 2026" "asus-control-center 0.4.0" "User Commands"
+.SH NAME
+asus-control-center \- battery, performance, GPU and display controls for ASUS laptops
+.SH SYNOPSIS
+.B asus-control-center
+.RB [ \-\-specs | \-\-self\-test ]
+.SH DESCRIPTION
+.B asus-control-center
+is a GTK 4 / libadwaita app that shows the hardware of an ASUS laptop and
+the controls its firmware exposes: battery charge limit and charging mode,
+performance profile, GPU MUX and iGPU-only mode, keyboard backlight, fan and
+temperature readings, and display dimming.
+.PP
+Controls that change hardware run
+.I /usr/libexec/asus-control-center/acc-helper
+through
+.BR pkexec (1),
+which asks for an administrator password. The helper accepts only a fixed
+list of actions and values.
+.SH OPTIONS
+.TP
+.B \-\-specs
+Print the hardware report and which controls this machine supports, then
+exit. Nothing is written.
+.TP
+.B \-\-self\-test
+Same report as
+.BR \-\-specs ,
+then check the sign-in crypto. Exits non-zero if that check fails.
+.SH ENVIRONMENT
+.TP
+.B ACC_DEBUG
+When set, print debugging output to standard error.
+.SH FILES
+.TP
+.I /usr/share/asus-control-center/
+Stylesheets, images and the bundled Soft Brightness Plus GNOME Shell
+extension.
+.TP
+.I ~/.local/share/gnome-shell/extensions/soft-brightness-plus@joelkitching.com/
+Where the extension is copied when OLED dimming is turned on.
+.SH SEE ALSO
+.BR asusctl (1),
+.BR supergfxctl (1),
+.BR pkexec (1)
+.SH BUGS
+https://github.com/Mostafamomen/asus-control-center/issues

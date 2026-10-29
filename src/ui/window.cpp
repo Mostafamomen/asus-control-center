@@ -23,6 +23,11 @@
 
 #include <adwaita.h>
 
+/* set by the Makefile from VERSION */
+#ifndef ACC_VERSION
+#define ACC_VERSION "0.4.0"
+#endif
+
 #define APP_ID "io.github.asuscontrolcenter.AsusControlCenter"
 
 /* name shown in the sidebar: the account created on the login page,
@@ -154,7 +159,7 @@ about_cb (GtkButton *b, gpointer user)
   AdwAboutDialog *d =
     ADW_ABOUT_DIALOG (adw_about_dialog_new ());
   adw_about_dialog_set_application_name (d, "ASUS Control Center");
-  adw_about_dialog_set_version (d, "0.3");
+  adw_about_dialog_set_version (d, ACC_VERSION);
   adw_about_dialog_set_comments (d, acc_tr (ACC_T_DESC));
   adw_about_dialog_set_license_type (d, GTK_LICENSE_GPL_3_0);
   adw_about_dialog_set_application_icon (d, APP_ID);

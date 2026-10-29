@@ -673,7 +673,7 @@ gpu_mode_cb (GtkCheckButton *b, gpointer data)
 
   gboolean eco = mode == GPU_JOB_GFX_INTEGRATED;
   GtkAlertDialog *d = gtk_alert_dialog_new
-                        (acc_tr (eco ? ACC_T_GFX_T : ACC_T_GPU_SWITCH_T));
+                        ("%s", acc_tr (eco ? ACC_T_GFX_T : ACC_T_GPU_SWITCH_T));
   const gchar *btns[] = { acc_tr (ACC_T_SWITCH),
                           acc_tr (ACC_T_CANCEL), NULL };
   gtk_alert_dialog_set_buttons (d, btns);

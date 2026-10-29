@@ -1,0 +1,91 @@
+name: Packages
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rpm:
+    name: RPM (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    # EL 10 needs CRB + EPEL packages that may lag behind Fedora; a failure
+    # there should not block the Fedora and Debian packages.
+    continue-on-error: ${{ matrix.optional }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Fedora
+            image: fedora:latest
+            optional: false
+          - name: EL 10
+            image: almalinux:10
+            optional: true
+    steps:
+      - run: dnf install -y git tar
+      - uses: actions/checkout@v4
+      - run: packaging/build-rpm.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ matrix.image == 'fedora:latest' && 'fedora' || 'el10' }}
+          path: dist/*.rpm
+
+  deb:
+    name: DEB (Ubuntu 24.04)
+    runs-on: ubuntu-latest
+    # Built on the oldest supported base (Ubuntu 24.04, libadwaita 1.5) so
+    # the same .deb installs on Ubuntu 24.04+, Mint 22+, Zorin 18,
+    # Pop!_OS 24.04, elementary OS 8 and Debian 13.
+    container: ubuntu:24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: packaging/build-deb.sh
+      - name: Lint
+        run: |
+          apt-get install -y --no-install-recommends lintian
+          lintian --fail-on error dist/*.deb
+      - name: Install and self-test
+        run: |
+          apt-get install -y ./dist/*.deb
+          asus-control-center --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-ubuntu-24.04
+          path: dist/*.deb
+
+  release:
+    name: Attach to GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [rpm, deb]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag matches the packaged version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          spec=$(sed -n 's/^Version:[[:space:]]*//p' packaging/rpm/asus-control-center.spec)
+          deb=$(sed -n '1s/.*(\([^)-]*\).*/\1/p' debian/changelog)
+          echo "tag=$tag spec=$spec debian=$deb"
+          [ "$tag" = "$spec" ] && [ "$tag" = "$deb" ]
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum *.rpm *.deb > SHA256SUMS && cat SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.rpm
+            dist/*.deb
+            dist/SHA256SUMS
