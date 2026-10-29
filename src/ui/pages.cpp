@@ -10,6 +10,7 @@
 #include "mcui.h"
 #include "specs.h"
 #include "../i18n/i18n.h"
+#include "../control/backlight.h"
 #include "../control/brightness.h"
 #include "../control/ctl.h"
 #include "../control/asusd.h"
@@ -52,8 +53,10 @@ static gboolean   s_gpu_can_eco = FALSE;
 static AccGfxMode s_gfx_mode = ACC_GFX_UNKNOWN; /* supergfxd live mode */
 static AccGfxMode s_gfx_pending = ACC_GFX_UNKNOWN; /* waits for logout */
 /* display page */
-static GtkWidget *f_dsp_res, *f_dsp_hw, *f_dsp_slider, *f_dsp_pct;
+static GtkWidget *f_dsp_res, *f_dsp_slider, *f_dsp_pct;
+static GtkWidget *f_bl_slider, *f_bl_pct;
 static gint64      s_dsp_touch = 0;   /* ms of last user slider drag    */
+static gint64      s_bl_touch = 0;    /* same, for the backlight slider  */
 /* perf page */
 static AccRing   *f_perf_ring;
 static GtkWidget *f_fan_cpu, *f_fan_gpu, *f_perf_temp;
@@ -898,6 +901,16 @@ dsp_cb (GtkRange *rng)
   acc_brightness_set (gtk_range_get_value (rng));
 }
 
+/* the normal hardware backlight, on its own */
+static void
+bl_cb (GtkRange *rng)
+{
+  if (s_sync)
+    return;
+  s_bl_touch = g_get_monotonic_time () / 1000;
+  acc_backlight_set (gtk_range_get_value (rng));
+}
+
 GtkWidget *
 acc_page_disp (AccUI *u)
 {
@@ -930,9 +943,35 @@ acc_page_disp (AccUI *u)
     gtk_widget_set_hexpand (ctl, TRUE);
     gtk_box_append (GTK_BOX (ctl),
                     w_row (acc_tr (ACC_T_DISPLAY_SET), &f_dsp_res));
+
+    /* normal backlight first, then the OLED dimming below it */
+    GtkWidget *bl = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    /* both slider labels share one width so the two tracks line up */
+    GtkWidget *bl_l = w_lbl (acc_tr (ACC_T_HWRO), "dim", 0);
+    gtk_label_set_width_chars (GTK_LABEL (bl_l), 16);
+    gtk_box_append (GTK_BOX (bl), bl_l);
+    f_bl_slider = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL,
+                                            (gdouble) 1, (gdouble) 100, 1);
+    gtk_scale_set_draw_value (GTK_SCALE (f_bl_slider), FALSE);
+    gtk_widget_set_hexpand (f_bl_slider, TRUE);
+    f_bl_pct = w_lbl ("—", "val", 1);
+    gtk_box_append (GTK_BOX (bl), f_bl_slider);
+    gtk_box_append (GTK_BOX (bl), f_bl_pct);
+    gtk_box_append (GTK_BOX (ctl), bl);
+    gdouble blv = acc_backlight_get ();
+    if (blv >= 0)
+      {
+        gtk_range_set_value (GTK_RANGE (f_bl_slider), blv);
+        g_signal_connect (f_bl_slider, "value-changed",
+                          G_CALLBACK (bl_cb), NULL);
+      }
+    else
+      gtk_widget_set_sensitive (f_bl_slider, FALSE);
+
     GtkWidget *dim = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_box_append (GTK_BOX (dim),
-                    w_lbl (acc_tr (ACC_T_SOFTDIM), "dim", 0));
+    GtkWidget *dim_l = w_lbl (acc_tr (ACC_T_SOFTDIM), "dim", 0);
+    gtk_label_set_width_chars (GTK_LABEL (dim_l), 16);
+    gtk_box_append (GTK_BOX (dim), dim_l);
     f_dsp_slider = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL,
                                              (gdouble) 10, (gdouble) 100, 1);
     gtk_scale_set_draw_value (GTK_SCALE (f_dsp_slider), FALSE);
@@ -975,8 +1014,6 @@ acc_page_disp (AccUI *u)
             gtk_box_append (GTK_BOX (ctl), btn);
           }
       }
-    gtk_box_append (GTK_BOX (ctl),
-                    w_row (acc_tr (ACC_T_HWRO), &f_dsp_hw));
     gtk_box_append (GTK_BOX (block), ctl);
   }
   gtk_box_append (GTK_BOX (li), block);
@@ -2073,11 +2110,16 @@ acc_page_refresh (AccUI *u)
                                               "%d × %d @ %.0f Hz",
                                               d.width, d.height, d.refresh_hz), buf)
                                : "—");
-      gtk_label_set_text (GTK_LABEL (f_dsp_hw),
-                          d.backlight_max > 0
-                          ? (g_snprintf (buf, sizeof buf, "%d / %d",
-                                          d.backlight_now, d.backlight_max), buf)
-                          : "—");
+      if (d.backlight_max > 0 && d.backlight_now >= 0)
+        {
+          gdouble bl = d.backlight_now * 100.0 / d.backlight_max;
+          /* same 3 s hands-off rule as the dimming slider below; the
+           * Fn keys and GNOME's own slider move this one too */
+          if (g_get_monotonic_time () / 1000 - s_bl_touch >= 3000)
+            gtk_range_set_value (GTK_RANGE (f_bl_slider), bl);
+          g_snprintf (buf, sizeof buf, "%.0f%%", bl);
+          gtk_label_set_text (GTK_LABEL (f_bl_pct), buf);
+        }
       gdouble sbp = acc_brightness_get ();
       if (sbp >= 0)
         {
@@ -2189,7 +2231,8 @@ acc_page_teardown (void)
   s_gpu_jobs = 0;
   f_gpu_hybrid = f_gpu_ult = f_gpu_eco = NULL;
   f_gpu_eco_note = NULL;
-  f_dsp_res = f_dsp_hw = f_dsp_slider = f_dsp_pct = NULL;
+  f_dsp_res = f_dsp_slider = f_dsp_pct = NULL;
+  f_bl_slider = f_bl_pct = NULL;
   f_fan_cpu = f_fan_gpu = f_perf_temp = NULL;
   f_perf_q = f_perf_b = f_perf_p = NULL;
   f_perf_spin = f_perf_act = f_perf_ac = f_perf_bat = f_perf_note = NULL;

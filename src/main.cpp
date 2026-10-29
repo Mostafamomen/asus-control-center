@@ -10,6 +10,7 @@
 #include "ui/home.h"
 #include "ui/login.h"
 #include "user/user.h"
+#include "control/backlight.h"
 #include "control/brightness.h"
 #include "control/asusd.h"
 #include "control/gfx.h"
@@ -368,6 +369,14 @@ self_test (void)
                                                h.t_cpu, h.t_board) : NULL;
     r_cap (t != NULL, "Temperature sensors", t ? t : "not exposed");
     g_free (t);
+  }
+  {
+    gdouble bl = acc_backlight_get ();
+    gchar *d2 = bl >= 0
+      ? g_strdup_printf ("current %.0f%%, set through logind", bl)
+      : g_strdup ("no /sys/class/backlight device");
+    r_cap (bl >= 0, "Backlight", d2);
+    g_free (d2);
   }
   {
     AccSoftDim sd = acc_softdim_status ();
