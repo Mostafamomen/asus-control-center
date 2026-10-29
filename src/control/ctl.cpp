@@ -7,7 +7,7 @@
 #include <string.h>
 
 #define PKEXEC "/usr/bin/pkexec"
-#define HELPER "/usr/local/bin/acc-helper"
+#define HELPER "/usr/libexec/asus-control-center/acc-helper"
 
 static int s_last_exit = 0;   /* exit status of the last helper run */
 
