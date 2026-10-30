@@ -23,3 +23,4 @@ asus-control-center
 /debian/*.substvars
 /debian/*.debhelper.log
 /asus-control-center-*.tar.gz
+launcher

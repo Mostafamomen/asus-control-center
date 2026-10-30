@@ -34,6 +34,25 @@ acc_ctl_run (const gchar *action, const gchar *arg, gchar **err)
 {
   if (err)
     *err = NULL;
+
+  /* Validate action against whitelist before touching pkexec */
+  static const gchar *allowed_actions[] = {
+    "set-perf", "set-charge", "set-charge-mode",
+    "set-gpu-mux", "set-kbd", NULL
+  };
+  gboolean action_ok = FALSE;
+  if (action)
+    for (int i = 0; allowed_actions[i]; i++)
+      if (g_strcmp0 (allowed_actions[i], action) == 0)
+        { action_ok = TRUE; break; }
+
+  if (!action_ok || !arg || !*arg)
+    {
+      if (err)
+        *err = g_strdup ("invalid action or argument");
+      return FALSE;
+    }
+
   if (!acc_ctl_available ())
     {
       if (err)
