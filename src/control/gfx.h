@@ -1,65 +1,52 @@
-/* control/gfx.h - supergfxctl client (iGPU-only / Integrated mode)
+/* control/gfx.h - read-only dGPU power and Integrated-mode capability probe
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * This laptop's firmware has no dgpu_disable attribute, so "integrated
- * only" cannot be a firmware write. supergfxd (asus-linux) does it the
- * supported way instead: it blocks the NVIDIA modules and removes the dGPU
- * from the PCI bus, and the switch completes at the next logout.
+ * "Integrated (Intel Arc) only" needs a firmware switch that cuts the NVIDIA
+ * GPU's power (asus-armoury / asus-nb-wmi `dgpu_disable`). The N6506CU does
+ * not expose one: its firmware only offers the display MUX. ASUSCraft
+ * therefore never offers Integrated mode on such machines, and it does not
+ * drive supergfxd or unbind/unload the NVIDIA driver itself.
  *
- * Fixed argv (/usr/bin/supergfxctl, capped by timeout(1)), no shell, never
- * on the GTK main thread. supergfxd runs as root and
- * its D-Bus policy lets the desktop user change the mode, so no polkit
- * helper is involved. Every function returns FALSE when supergfxctl or the
- * daemon is missing, and the UI then explains how to get it.
+ * This module only reads: it reports whether the firmware switch exists,
+ * whether supergfxd is running (it manages the same GPU as asusd), whether
+ * supergfxd left its NVIDIA blacklist behind after being removed, and the
+ * dGPU's runtime power state plus which of the user's own processes keep it
+ * awake. Nothing here writes to the system.
  */
 #ifndef ACC_GFX_H
 #define ACC_GFX_H
-#include <gio/gio.h>
+#include <glib.h>
 
 G_BEGIN_DECLS
 
 typedef enum
 {
-  ACC_GFX_UNKNOWN = 0,
-  ACC_GFX_HYBRID,
-  ACC_GFX_INTEGRATED,
-  ACC_GFX_OTHER            /* Vfio, AsusEgpu, AsusMuxDgpu, NvidiaNoModeset */
-} AccGfxMode;
-
-typedef enum
-{
-  ACC_GFX_ACT_NONE = 0,
-  ACC_GFX_ACT_LOGOUT,
-  ACC_GFX_ACT_REBOOT,
-  ACC_GFX_ACT_INTEGRATED_FIRST   /* must pass through Integrated first */
-} AccGfxAction;
+  ACC_DGPU_PM_UNKNOWN = -1,
+  ACC_DGPU_PM_SUSPENDED = 0,     /* runtime D3: almost no power          */
+  ACC_DGPU_PM_ACTIVE = 1
+} AccDgpuPm;
 
 typedef struct
 {
-  gboolean     known;            /* a probe has finished at least once    */
-  gboolean     installed;        /* /usr/bin/supergfxctl exists           */
-  gboolean     running;          /* supergfxd answered                    */
-  AccGfxMode   mode;             /* live mode                             */
-  gboolean     can_integrated;   /* "Integrated" in the supported list    */
-  AccGfxMode   pending;          /* requested mode waiting for an action  */
-  AccGfxAction action;           /* what the user must do to finish       */
+  gboolean  dgpu_present;        /* an NVIDIA display controller exists   */
+  gboolean  has_dgpu_disable;    /* firmware exposes dgpu_disable         */
+  gboolean  supergfxd_running;   /* org.supergfxctl.Daemon on system bus  */
+  gboolean  supergfx_leftover;   /* its modprobe blacklist outlived it    */
+  AccDgpuPm pm;                  /* dGPU runtime power state              */
+  gchar     holders[160];        /* own processes with /dev/nvidia* open  */
 } AccGfxState;
 
-/* Non-blocking: returns the last snapshot (known = FALSE before the first
- * probe) and starts a background probe when it is older than 3 s, so the
- * 2 s page refresh never waits on the daemon. */
+/* Fill *out. Cheap: the process scan behind `holders` is cached for 10 s.
+ * Returns out->dgpu_present. */
 gboolean acc_gfx_state (AccGfxState *out);
 
-/* Blocking probe, for the command-line self-test only. */
-gboolean acc_gfx_state_sync (AccGfxState *out);
+/* TRUE when Integrated mode could be offered at all. Always FALSE today:
+ * a dgpu_disable attribute that ASUSCraft has not verified on the model
+ * is reported, never used. */
+gboolean acc_gfx_integrated_supported (const AccGfxState *st);
 
-/* Request HYBRID or INTEGRATED in a worker thread; cb runs on the main
- * thread. _finish gives the action that completes the switch, or the
- * daemon's own message in *err (free it). */
-void     acc_gfx_set_mode_async  (AccGfxMode mode, GAsyncReadyCallback cb,
-                                  gpointer user);
-gboolean acc_gfx_set_mode_finish (GAsyncResult *res, AccGfxAction *action,
-                                  gchar **err);
+/* Pure helper for tests: TRUE when a modprobe.d text blacklists `nvidia`. */
+gboolean acc_gfx_text_blacklists_nvidia (const gchar *text);
 
 G_END_DECLS
 #endif

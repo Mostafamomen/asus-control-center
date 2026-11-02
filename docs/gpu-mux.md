@@ -164,3 +164,36 @@ Enabled
 
 `card2-eDP-1` is the connected internal panel, i.e. NVIDIA now drives it.
 The switch works; it just cannot happen while the NVIDIA driver is loaded.
+
+## 9. Correction (2026-11-02, from the journal of 79 boots)
+
+* The helper's **direct write is what switches the MUX** on the N6506CU
+  (BIOS 309): after the 13:25 request the next two boots ran with i915's eDP
+  disabled, i.e. the panel on NVIDIA. The firmware keeps reporting the
+  running mode until reboot, so the old read-back check failed, the app
+  then *also* queued the value in asusd, and that duplicate write is what
+  asus-shutdown logs as `Input/output error` at every shutdown. Every
+  deferred apply on this laptop (7 of 7) has failed that way.
+* Fix: the helper confirms a MUX write by `pending_reboot` (exit 5 =
+  written, unconfirmed), the app no longer double-queues, and it records
+  the request with the boot id so the next boot reports *verified* or
+  *failed* (with the asusd/kernel line from that boot's journal).
+* `/etc/modprobe.d/supergfxd.conf`, left behind when supergfxctl was
+  removed on 2026-10-30, blacklists `nvidia`; since then nouveau won the
+  GPU on 5 boots, including one Ultimate boot. ASUSCraft warns about it;
+  removing it (plus `/etc/supergfxd.conf`, then `sudo dracut -f`) is the
+  user's decision.
+
+## 10. Integrated (Intel Arc) mode
+
+Not supported on this model and not offered. It needs a firmware dGPU
+power switch (`dgpu_disable` in asus-armoury or asus-nb-wmi); the N6506CU
+exposes only `gpu_mux_mode`, `charge_mode` and `pending_reboot`. The
+alternatives were rejected: supergfxd's Integrated mode is a driver
+blacklist plus PCI removal (not verified on this model, conflicts with
+asusd and left the blacklist behind), and unbinding/unloading the NVIDIA
+driver by hand is exactly what the safety rules forbid. In Hybrid the
+dGPU already runtime-suspends (NVreg_DynamicPowerManagement=3, D3cold
+allowed) whenever no process holds `/dev/nvidia0`; the GPU page now shows
+that state and which processes keep it awake. Supporting Integrated would
+need a firmware `dgpu_disable` attribute verified on the model.

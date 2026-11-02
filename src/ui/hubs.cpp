@@ -450,7 +450,8 @@ diag_run (void)
   AsusdProfileState ps;
   gboolean asusd = acc_asusd_profiles (&ps) && ps.available;
   AccGfxState gx;
-  gboolean gfx = acc_gfx_state (&gx) && gx.known && gx.running;
+  acc_gfx_state (&gx);
+  gboolean gfx = gx.supergfxd_running;
   gboolean helper = acc_ctl_available ();
 
   g_string_append_printf (s, "\n%s: asusd %s · supergfxd %s · %s %s",
@@ -461,8 +462,11 @@ diag_run (void)
                           acc_tr (helper ? ACC_T_INSTALLED : ACC_T_MISSING));
   tone_pill (p_asusd, acc_tr (asusd ? ACC_T_RUNNING : ACC_T_STOPPED),
              asusd ? "on" : "off");
+  /* ASUSCraft does not use supergfxd: running is a conflict risk, not OK */
   tone_pill (p_gfx, acc_tr (gfx ? ACC_T_RUNNING : ACC_T_STOPPED),
-             gfx ? "on" : "off");
+             gfx ? "soon" : "off");
+  if (gfx || gx.supergfx_leftover)
+    warn = TRUE;
   tone_pill (p_helper, acc_tr (helper ? ACC_T_INSTALLED : ACC_T_MISSING),
              helper ? "on" : "soon");
   if (!helper)

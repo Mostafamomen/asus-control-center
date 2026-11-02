@@ -23,8 +23,10 @@ acc_ctl_helper_stale (void)
   gchar *txt = NULL;
   if (!g_file_get_contents (HELPER, &txt, NULL, NULL) || !txt)
     return FALSE;
-  /* helper v2 introduced the asus-armoury path + read-back verification */
-  gboolean stale = strstr (txt, "armoury_file") == NULL;
+  /* helper v2 introduced the asus-armoury path + read-back verification;
+   * v3 confirms MUX writes by pending_reboot (exit 5 = unconfirmed) */
+  gboolean stale = strstr (txt, "armoury_file") == NULL
+                   || strstr (txt, "pending_reboot") == NULL;
   g_free (txt);
   return stale;
 }

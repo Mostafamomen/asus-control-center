@@ -15,6 +15,7 @@
 #include "../control/ctl.h"
 #include "../control/asusd.h"
 #include "../control/gfx.h"
+#include "../control/muxreq.h"
 #include "../control/softdim.h"
 #include "../probe/probe.h"
 #include "../probe/devs.h"
@@ -47,11 +48,15 @@ static GtkWidget *f_gpu_pill;      /* live / queued status */
 static GtkWidget *f_gpu_spin;      /* busy indicator */
 static gint       s_gpu_jobs = 0;  /* in-flight MUX jobs (0 = idle)   */
 static GtkWidget *f_gpu_hybrid, *f_gpu_ult, *f_gpu_eco;
-static GtkWidget *f_gpu_eco_note;  /* why iGPU-only is (not) available */
+static GtkWidget *f_gpu_eco_note;  /* why Integrated is (not) available */
+static GtkWidget *f_gpu_pm;        /* NVIDIA runtime power state */
 static gboolean   s_gpu_can_hybrid = TRUE, s_gpu_can_ultimate = TRUE;
-static gboolean   s_gpu_can_eco = FALSE;
-static AccGfxMode s_gfx_mode = ACC_GFX_UNKNOWN; /* supergfxd live mode */
-static AccGfxMode s_gfx_pending = ACC_GFX_UNKNOWN; /* waits for logout */
+static gint       s_gpu_live = -1; /* live MUX value, -1 unknown */
+/* result of a request made before the last reboot, kept for this session
+ * once read (the record itself is cleared so it is reported only once) */
+static AccMuxReqState s_mux_result = ACC_MUXREQ_NONE;
+static gint       s_mux_result_mode = -1;
+static gchar     *s_mux_result_reason = NULL;
 /* display page */
 static GtkWidget *f_dsp_res, *f_dsp_slider, *f_dsp_pct;
 static GtkWidget *f_bl_slider, *f_bl_pct;
@@ -447,11 +452,9 @@ acc_page_bat (AccUI *u)
 
 /* ------------------------------------------------ gpu page ----------- */
 
-/* Hybrid/Ultimate move the firmware MUX. iGPU only (Eco) has no firmware
- * switch here (no dgpu_disable attribute), so it goes through supergfxd,
- * which removes the dGPU from the PCI bus and finishes at logout. It is
- * offered only when supergfxd is running, lists Integrated, and the MUX
- * is in Hybrid. */
+/* Hybrid/Ultimate move the firmware MUX. Integrated (iGPU only) needs a
+ * firmware dGPU power switch that this firmware does not have, so its card
+ * is shown disabled with the reason (see control/gfx.h). */
 static void
 gpu_radios_sensitive (gboolean on)
 {
@@ -460,12 +463,11 @@ gpu_radios_sensitive (gboolean on)
   if (f_gpu_ult)
     gtk_widget_set_sensitive (f_gpu_ult, on && s_gpu_can_ultimate);
   if (f_gpu_eco)
-    gtk_widget_set_sensitive (f_gpu_eco, on && s_gpu_can_eco);
+    gtk_widget_set_sensitive (f_gpu_eco, FALSE);
 }
 
-/* job modes: the two MUX values, then the two supergfxd requests */
-enum { GPU_JOB_ULT = 0, GPU_JOB_HYBRID = 1,
-       GPU_JOB_GFX_INTEGRATED = 2, GPU_JOB_GFX_HYBRID = 3 };
+/* job modes are the two MUX values */
+enum { GPU_JOB_ULT = 0, GPU_JOB_HYBRID = 1 };
 
 typedef struct { gint mode; } GpuJob;
 
@@ -485,25 +487,18 @@ gpu_job_end (void)
   acc_page_refresh (NULL);
 }
 
-/* supergfxd answered (worker thread done): report, then unlock the page */
-static void
-gfx_done_cb (GObject *src, GAsyncResult *res, gpointer data)
+static const gchar *
+mux_name (gint mode)
 {
-  (void) src;
-  (void) data;
-  AccGfxAction act = ACC_GFX_ACT_NONE;
-  gchar *err = NULL;
-  if (acc_gfx_set_mode_finish (res, &act, &err))
-    acc_ui_toast (acc_tr (act == ACC_GFX_ACT_LOGOUT ? ACC_T_GFX_LOGOUT
-                          : act == ACC_GFX_ACT_REBOOT ? ACC_T_GFX_REBOOT
-                          : ACC_T_WROK));
-  else
-    {
-      g_printerr ("supergfxctl: %s\n", err ? err : "?");
-      acc_ui_toast (acc_tr (ACC_T_ERR_SERVICE));
-    }
-  g_free (err);
-  gpu_job_end ();
+  return acc_tr (mode == 0 ? ACC_T_GPU_ULT : ACC_T_GPU_HYBRID);
+}
+
+static void
+gpu_toast_fmt (AccStr fmt, gint mode)
+{
+  gchar *t = g_strdup_printf (acc_tr (fmt), mux_name (mode));
+  acc_ui_toast (t);
+  g_free (t);
 }
 
 static gboolean
@@ -512,57 +507,48 @@ gpu_apply_job (gpointer data)
   GpuJob *j = (GpuJob *) data;
   gint mode = j->mode;
   gchar *svc_err = NULL;
-  gboolean ok = FALSE;
-  gboolean queued = FALSE;
+  /* a new request replaces whatever the last boot reported */
+  s_mux_result = ACC_MUXREQ_NONE;
 
-  /* supergfxd request: no firmware write, the daemon finishes it at
-   * logout (or reboot). It runs in a worker thread because supergfxd can
-   * take seconds to answer; gfx_done_cb ends the job. */
-  if (mode == GPU_JOB_GFX_INTEGRATED || mode == GPU_JOB_GFX_HYBRID)
+  /* 1) the firmware write itself, through the whitelisted polkit helper.
+   *    The firmware applies it at the next boot; on this laptop it is the
+   *    path that actually switches. Exit 0 = confirmed (value or
+   *    pending_reboot), 5 = written but unconfirmed, 4 = refused. */
+  gboolean tried = acc_ctl_available () && !acc_ctl_helper_stale ();
+  gboolean ok = tried && acc_ctl_set_gpu_mux (mode);
+  gint c = tried ? acc_ctl_last_exit () : -1;
+
+  if (ok || c == 5)
     {
-      acc_gfx_set_mode_async (mode == GPU_JOB_GFX_INTEGRATED
-                              ? ACC_GFX_INTEGRATED : ACC_GFX_HYBRID,
-                              gfx_done_cb, NULL);
-      g_free (j);
-      return G_SOURCE_REMOVE;
+      /* do NOT also queue it in asusd: a second write of the same value
+       * at shutdown is refused (-EIO) and only produces an error */
+      acc_muxreq_record (mode, FALSE);
+      gpu_toast_fmt (ok ? ACC_T_MUX_ACCEPTED : ACC_T_MUX_UNCONFIRMED, mode);
+      goto out;
+    }
+  if (c == 127 || c == 126)              /* polkit prompt dismissed */
+    {
+      acc_ui_toast (acc_tr (ACC_T_ERR_AUTH));
+      goto out;
     }
 
-  /* 1) the firmware write itself — the same value MyASUS writes, through
-   *    the whitelisted polkit helper. */
-  if (acc_ctl_available () && !acc_ctl_helper_stale ())
-    ok = acc_ctl_set_gpu_mux (mode);
-
-  /* 2) When the EC refuses it, asusd can queue the value for shutdown:
-   *    asus-shutdown waits for the dGPU to go idle, unloads the NVIDIA
-   *    stack and only then writes the MUX. That is the one sequence this
-   *    firmware accepts, so use it instead of pretending the switch
-   *    failed. Never queue on battery — the EC refuses it there too. */
-  if (!ok)
+  /* 2) the firmware refused the write now. asusd can queue it for
+   *    shutdown, after the NVIDIA stack is unloaded. Never on battery:
+   *    the EC refuses it there too. */
+  if (c == 4 && !acc_dev_on_ac ())
     {
-      gint c = acc_ctl_last_exit ();
-      if (c == 127)                       /* polkit prompt dismissed */
-        {
-          acc_ui_toast (acc_tr (ACC_T_ERR_AUTH));
-          goto out;
-        }
-      if (!acc_dev_on_ac ())
-        {
-          acc_ui_toast (acc_tr (ACC_T_GPU_AC));
-          goto out;
-        }
-      if (acc_asusd_available () && acc_asusd_set_gpu_mux (mode, &svc_err))
-        {
-          ok = TRUE;
-          queued = TRUE;
-        }
+      acc_ui_toast (acc_tr (ACC_T_GPU_AC));
+      goto out;
+    }
+  if (c == 4 && acc_asusd_available ()
+      && acc_asusd_set_gpu_mux (mode, &svc_err))
+    {
+      acc_muxreq_record (mode, TRUE);
+      acc_ui_toast (acc_tr (ACC_T_MUX_QUEUE_WARN));
+      goto out;
     }
 
-  if (ok)
-    acc_ui_toast (acc_tr (queued ? ACC_T_GPU_QUEUED : ACC_T_WROK));
-  else if (svc_err)
-    acc_ui_toast (acc_tr (ACC_T_ERR_SERVICE));
-  else
-    acc_ui_toast (acc_tr (ACC_T_ERR_FW));
+  acc_ui_toast (acc_tr (svc_err ? ACC_T_ERR_SERVICE : ACC_T_ERR_FW));
 
 out:
   g_free (svc_err);
@@ -582,9 +568,11 @@ gpu_start_job (gint mode)
   g_timeout_add (80, gpu_apply_job, j);
 }
 
-/* asusd has no "clear the queue" call. Queueing the mode that is already
- * live makes the shutdown write a no-op, which is the same outcome and
- * keeps the UI honest: QueuedGpuValue == CurrentValue again. */
+/* Cancel a switch that waits for the restart.
+ * - asusd queue: asusd has no "clear" call; queueing the live mode makes
+ *   the shutdown write a no-op request and QueuedGpuValue == CurrentValue.
+ * - direct write: write the live mode back through the helper, which the
+ *   firmware accepts like any other MUX write. */
 static gboolean
 gpu_cancel_job (gpointer data)
 {
@@ -592,9 +580,14 @@ gpu_cancel_job (gpointer data)
   AsusdGpuState gs;
   gboolean ok = FALSE;
 
-  if (acc_asusd_gpu (&gs) && gs.current >= 0)
+  if (acc_asusd_gpu (&gs) && gs.queued >= 0 && gs.queued != gs.current
+      && gs.current >= 0)
     ok = acc_asusd_set_gpu_mux (gs.current, NULL);
+  else if (s_gpu_live == 0 || s_gpu_live == 1)
+    ok = acc_ctl_set_gpu_mux (s_gpu_live) || acc_ctl_last_exit () == 5;
 
+  if (ok)
+    acc_muxreq_clear ();
   acc_ui_toast (acc_tr (ok ? ACC_T_GPU_CANCEL_OK : ACC_T_ERR_SERVICE));
   gpu_job_end ();
   return G_SOURCE_REMOVE;
@@ -611,8 +604,7 @@ gpu_cancel_cb (GtkButton *b, gpointer data)
   g_timeout_add (80, gpu_cancel_job, NULL);
 }
 
-/* Ultimate rewires the internal panel and iGPU only removes the dGPU:
- * ask before either. data carries the job mode. */
+/* Ultimate rewires the internal panel: ask first. data = job mode. */
 static void
 gpu_confirm_cb (GObject *src, GAsyncResult *res, gpointer data)
 {
@@ -635,28 +627,9 @@ gpu_mode_cb (GtkCheckButton *b, gpointer data)
     return;
 
   gint mode = GPOINTER_TO_INT (data);
-  gboolean in_igpu = s_gfx_mode == ACC_GFX_INTEGRATED;
 
-  /* leaving iGPU only (or dropping a request for it that still waits for
-   * logout): supergfxd brings the dGPU back, no MUX write */
-  if (mode == GPU_JOB_HYBRID && s_gfx_pending == ACC_GFX_INTEGRATED)
-    in_igpu = TRUE;
-  if (mode == GPU_JOB_HYBRID && in_igpu)
-    {
-      gpu_start_job (GPU_JOB_GFX_HYBRID);
-      return;
-    }
-  /* Ultimate from iGPU only would wire the panel to a removed GPU */
-  if (mode == GPU_JOB_ULT && in_igpu)
-    {
-      acc_ui_toast (acc_tr (ACC_T_GFX_HYBRID_FIRST));
-      acc_page_refresh (NULL);
-      return;
-    }
-
-  /* an old helper writes the dead legacy node: say so, do not fail mute
-   * (MUX writes only; iGPU only goes through supergfxd, not the helper) */
-  if (mode <= GPU_JOB_HYBRID && acc_ctl_helper_stale ())
+  /* an old helper cannot report an accepted MUX write: say so */
+  if (acc_ctl_helper_stale ())
     {
       acc_ui_toast (acc_tr (ACC_T_HELPER_STALE));
       acc_page_refresh (NULL);
@@ -669,16 +642,14 @@ gpu_mode_cb (GtkCheckButton *b, gpointer data)
       return;
     }
 
-  gboolean eco = mode == GPU_JOB_GFX_INTEGRATED;
-  GtkAlertDialog *d = gtk_alert_dialog_new
-                        ("%s", acc_tr (eco ? ACC_T_GFX_T : ACC_T_GPU_SWITCH_T));
+  GtkAlertDialog *d = gtk_alert_dialog_new ("%s",
+                                            acc_tr (ACC_T_GPU_SWITCH_T));
   const gchar *btns[] = { acc_tr (ACC_T_SWITCH),
                           acc_tr (ACC_T_CANCEL), NULL };
   gtk_alert_dialog_set_buttons (d, btns);
   gtk_alert_dialog_set_cancel_button (d, 1);
   gtk_alert_dialog_set_default_button (d, 1);
-  gtk_alert_dialog_set_detail (d, acc_tr (eco ? ACC_T_GFX_B
-                                              : ACC_T_GPU_SWITCH_B));
+  gtk_alert_dialog_set_detail (d, acc_tr (ACC_T_GPU_SWITCH_B));
   gtk_alert_dialog_choose (d, GTK_WINDOW (acc_ui_root ()), NULL,
                            gpu_confirm_cb, GINT_TO_POINTER (mode));
   g_object_unref (d);
@@ -748,8 +719,7 @@ acc_page_gpu (AccUI *u)
                       GINT_TO_POINTER (1));
     g_signal_connect (f_gpu_ult,    "toggled", G_CALLBACK (gpu_mode_cb),
                       GINT_TO_POINTER (GPU_JOB_ULT));
-    g_signal_connect (f_gpu_eco,    "toggled", G_CALLBACK (gpu_mode_cb),
-                      GINT_TO_POINTER (GPU_JOB_GFX_INTEGRATED));
+    /* Integrated has no handler: it is never offered (see gfx.h) */
     GtkWidget *gr = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_set_homogeneous (GTK_BOX (gr), TRUE);
     gtk_widget_add_css_class (f_gpu_hybrid, "optcard");
@@ -768,11 +738,12 @@ acc_page_gpu (AccUI *u)
     g_free (muxf);
     gtk_box_append (GTK_BOX (ctl), gr);
 
-    /* the refresh fills in why iGPU only is (not) available */
-    f_gpu_eco_note = w_lbl (acc_tr (ACC_T_GFX_HINT), "foot", 0);
+    /* the refresh fills in why Integrated is (not) available */
+    f_gpu_eco_note = w_lbl (acc_tr (ACC_T_IGPU_WHY), "foot", 0);
     gtk_label_set_wrap (GTK_LABEL (f_gpu_eco_note), TRUE);
     gtk_label_set_width_chars (GTK_LABEL (f_gpu_eco_note), 30);
     gtk_box_append (GTK_BOX (ctl), f_gpu_eco_note);
+    gtk_box_append (GTK_BOX (ctl), w_row (acc_tr (ACC_T_DGPU_PM), &f_gpu_pm));
 
     /* CPU priority: exactly the same three firmware profiles as the
      * Power & Performance page, beside the MUX switch. One live state,
@@ -2008,27 +1979,35 @@ acc_page_refresh (AccUI *u)
       AsusdGpuState gs;
       gboolean has_gs = acc_asusd_gpu (&gs);
 
-      AccGfxState gx;
-      gboolean has_gx = acc_gfx_state (&gx);
-      s_gfx_mode = has_gx ? gx.mode : ACC_GFX_UNKNOWN;
-      s_gfx_pending = has_gx ? gx.pending : ACC_GFX_UNKNOWN;
-      gboolean igpu = s_gfx_mode == ACC_GFX_INTEGRATED;
+      s_gpu_live = mux;
 
-      /* iGPU only needs the daemon, its Integrated mode, and the panel on
-       * the iGPU (MUX hybrid); while active it stays selectable */
-      s_gpu_can_eco = has_gx && gx.can_integrated && (mux != 0 || igpu);
+      AccGfxState gx;
+      acc_gfx_state (&gx);
       if (f_gpu_eco_note)
-        gtk_label_set_text (GTK_LABEL (f_gpu_eco_note),
-                            acc_tr (!gx.known ? ACC_T_GFX_HINT
-                                    : !gx.installed ? ACC_T_GFX_NEED
-                                    : !has_gx ? ACC_T_GFX_START
-                                    : !gx.can_integrated ? ACC_T_GPU_ECO_WHY
-                                    : mux == 0 && !igpu ? ACC_T_GFX_MUX
-                                    : ACC_T_GFX_HINT));
+        {
+          GString *why = g_string_new (acc_tr (gx.has_dgpu_disable
+                                               ? ACC_T_IGPU_FW_UNVERIFIED
+                                               : ACC_T_IGPU_WHY));
+          if (gx.supergfxd_running)
+            g_string_append_printf (why, "\n%s", acc_tr (ACC_T_IGPU_SGFX));
+          gtk_label_set_text (GTK_LABEL (f_gpu_eco_note), why->str);
+          g_string_free (why, TRUE);
+        }
+      if (f_gpu_pm)
+        {
+          gchar *pm = NULL;
+          if (gx.pm == ACC_DGPU_PM_SUSPENDED)
+            pm = g_strdup (acc_tr (ACC_T_DGPU_SLEEP));
+          else if (gx.pm == ACC_DGPU_PM_ACTIVE && gx.holders[0])
+            pm = g_strdup_printf (acc_tr (ACC_T_DGPU_AWAKE_BY), gx.holders);
+          else if (gx.pm == ACC_DGPU_PM_ACTIVE)
+            pm = g_strdup (acc_tr (ACC_T_DGPU_AWAKE));
+          gtk_label_set_text (GTK_LABEL (f_gpu_pm), pm ? pm : "—");
+          g_free (pm);
+        }
 
       gtk_label_set_text (GTK_LABEL (f_gpu_now),
-                          igpu ? acc_tr (ACC_T_GPU_ECO)
-                          : mux == 0 ? acc_tr (ACC_T_GPU_ULT)
+                          mux == 0 ? acc_tr (ACC_T_GPU_ULT)
                           : mux == 1 ? acc_tr (ACC_T_GPU_HYBRID)
                           : "—");
 
@@ -2039,11 +2018,9 @@ acc_page_refresh (AccUI *u)
           s_gpu_can_ultimate = gs.allow_ultimate;
         }
 
-      /* The radio always follows the LIVE firmware value: a queued change
+      /* The radio always follows the LIVE firmware value: a pending change
        * is a request, not a state, and the note below spells it out. */
-      if (igpu)
-        gtk_check_button_set_active (GTK_CHECK_BUTTON (f_gpu_eco), TRUE);
-      else if (mux == 0)
+      if (mux == 0)
         gtk_check_button_set_active (GTK_CHECK_BUTTON (f_gpu_ult), TRUE);
       else if (mux == 1)
         gtk_check_button_set_active (GTK_CHECK_BUTTON (f_gpu_hybrid), TRUE);
@@ -2058,17 +2035,29 @@ acc_page_refresh (AccUI *u)
       if (f_gpu_pill)
         {
           gtk_label_set_text (GTK_LABEL (f_gpu_pill),
-                              mux >= 0 || igpu ? acc_tr (ACC_T_GPU_LIVE) : "");
-          gtk_widget_set_visible (f_gpu_pill, mux >= 0 || igpu);
+                              mux >= 0 ? acc_tr (ACC_T_GPU_LIVE) : "");
+          gtk_widget_set_visible (f_gpu_pill, mux >= 0);
         }
+
+      /* a request from an earlier boot: verified or failed, said once */
+      AccMuxReq rq;
+      acc_muxreq_check (mux, &rq);
+      if (rq.state == ACC_MUXREQ_VERIFIED || rq.state == ACC_MUXREQ_FAILED)
+        {
+          s_mux_result = rq.state;
+          s_mux_result_mode = rq.mode;
+          g_free (s_mux_result_reason);
+          s_mux_result_reason = g_strdup (rq.reason);
+          acc_muxreq_clear ();
+        }
+      gboolean rpend = rq.state == ACC_MUXREQ_PENDING && rq.mode != mux;
+      g_free (rq.reason);
 
       if (f_gpu_notice)
         {
           gboolean stale = acc_ctl_helper_stale ();
           gboolean pend = acc_dev_pending_reboot ();
           gboolean qpend = has_gs && gs.queued >= 0 && gs.queued != gs.current;
-          gboolean gpend = has_gx && (gx.pending == ACC_GFX_INTEGRATED
-                                      || gx.pending == ACC_GFX_HYBRID);
           const gchar *kind = NULL;
           gchar *head = NULL, *body = NULL;
 
@@ -2081,9 +2070,7 @@ acc_page_refresh (AccUI *u)
             {
               /* say which mode is queued: the queue is a request, not a
                * live state, and the user must know what will be applied */
-              head = g_strdup_printf ("%s · %s",
-                                      acc_tr (gs.queued == 0 ? ACC_T_GPU_ULT
-                                                             : ACC_T_GPU_HYBRID),
+              head = g_strdup_printf ("%s · %s", mux_name (gs.queued),
                                       acc_tr (ACC_T_GPU_NEXT));
               if (gs.shutdown_ready)
                 {
@@ -2100,22 +2087,46 @@ acc_page_refresh (AccUI *u)
                   body = g_strdup (acc_tr (ACC_T_GPU_NO_HOOK));
                 }
             }
-          else if (gpend)
+          else if (rpend)
             {
-              /* supergfxd accepted a request that finishes at logout */
               kind = "info";
-              head = g_strdup_printf ("%s · %s",
-                                      acc_tr (gx.pending == ACC_GFX_INTEGRATED
-                                              ? ACC_T_GPU_ECO
-                                              : ACC_T_GPU_HYBRID),
-                                      acc_tr (gx.action == ACC_GFX_ACT_REBOOT
-                                              ? ACC_T_GPU_NEXT
-                                              : ACC_T_GFX_AFTER_LOGOUT));
+              head = g_strdup_printf ("%s · %s", mux_name (rq.mode),
+                                      acc_tr (ACC_T_GPU_AFTER));
+              body = g_strdup (acc_tr (ACC_T_MUX_RESTART_STEP));
+            }
+          else if (s_mux_result == ACC_MUXREQ_VERIFIED)
+            {
+              kind = "info";
+              head = g_strdup_printf (acc_tr (ACC_T_MUX_VERIFIED),
+                                      mux_name (s_mux_result_mode));
+            }
+          else if (s_mux_result == ACC_MUXREQ_FAILED)
+            {
+              kind = "warn";
+              head = g_strdup_printf (acc_tr (ACC_T_MUX_FAILED),
+                                      mux_name (s_mux_result_mode),
+                                      mux_name (mux));
+              if (s_mux_result_reason)
+                body = g_strdup_printf (acc_tr (ACC_T_MUX_REASON),
+                                        s_mux_result_reason);
             }
           else if (pend)
             {
               kind = "info";
               head = g_strdup (acc_tr (ACC_T_GPU_PENDING));
+            }
+
+          /* the supergfxd leftover is a separate, standing problem */
+          if (gx.supergfx_leftover)
+            {
+              gchar *b2 = body ? g_strdup_printf ("%s\n\n%s", body,
+                                                  acc_tr (ACC_T_IGPU_LEFTOVER))
+                               : g_strdup (acc_tr (ACC_T_IGPU_LEFTOVER));
+              g_free (body);
+              body = b2;
+              kind = "warn";
+              if (!head)
+                head = g_strdup (acc_tr (ACC_T_GPU_MODE));
             }
 
           gtk_widget_remove_css_class (f_gpu_notice, "info");
@@ -2125,7 +2136,7 @@ acc_page_refresh (AccUI *u)
           gtk_label_set_text (GTK_LABEL (f_gpu_notice_t), head ? head : "");
           gtk_label_set_text (GTK_LABEL (f_gpu_notice_b), body ? body : "");
           gtk_widget_set_visible (f_gpu_notice_b, body != NULL);
-          gtk_widget_set_visible (f_gpu_cancel, qpend);
+          gtk_widget_set_visible (f_gpu_cancel, qpend || rpend);
           gtk_widget_set_visible (f_gpu_notice, head != NULL);
           g_free (head);
           g_free (body);

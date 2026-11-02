@@ -23,7 +23,7 @@ SRCS = src/main.cpp \
        src/probe/hwmon.cpp src/probe/gpu.cpp src/probe/display.cpp \
        src/probe/sysinfo.cpp src/probe/load.cpp src/probe/devs.cpp \
        src/control/brightness.cpp src/control/ctl.cpp src/control/asusd.cpp \
-       src/control/gfx.cpp src/control/softdim.cpp src/control/backlight.cpp \
+       src/control/gfx.cpp src/control/muxreq.cpp src/control/softdim.cpp src/control/backlight.cpp \
        src/user/user.cpp \
        src/ui/window.cpp src/ui/home.cpp src/ui/theme.cpp src/ui/ring.cpp \
        src/ui/spark.cpp src/ui/pages.cpp src/ui/hubs.cpp src/ui/mcui.cpp \
@@ -40,6 +40,8 @@ launcher-bin:
 	$(MAKE) -C launcher
 
 test: $(BIN) launcher-bin
+	./$(BIN) --check
+	bash -n data/acc-helper
 	./$(BIN) --self-test
 
 install: $(BIN)
