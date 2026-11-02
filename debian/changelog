@@ -1,3 +1,10 @@
+asus-control-center (0.6.0) unstable; urgency=medium
+
+  * GPU: fix MUX double-write, verify switch after reboot.
+  * Integrated (Intel Arc) shown unavailable with the reason.
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Mon, 02 Nov 2026 15:30:00 +0300
+
 asus-control-center (0.4.0) unstable; urgency=medium
 
   * First packaged release: RPM and Debian packages.
