@@ -9,6 +9,12 @@
 
 set -u
 
+# --- security: validate argument count -------------------------------------
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+  echo "usage: $0 <action> [value]" >&2
+  exit 1
+fi
+
 # --- portable device discovery (read-only) --------------------------------
 # Models differ in battery name (BAT0/BAT1/BATT), charge-limit file name and
 # WMI node; none of that changes the allowed actions or values.
@@ -41,7 +47,13 @@ charge_limit_file() {
 # firmware-attribute class. The old platform files may still exist but be
 # read-only or a dead alias, so the armoury copy always wins.
 armoury_file() {
-  local f="/sys/class/firmware-attributes/asus-armoury/attributes/$1/current_value"
+  local name="$1"
+  # Only allow known firmware attribute names (defense in depth)
+  case "$name" in
+    charge_mode|gpu_mux_mode) ;;
+    *) return 1 ;;
+  esac
+  local f="/sys/class/firmware-attributes/asus-armoury/attributes/$name/current_value"
   [ -e "$f" ] && { printf '%s\n' "$f"; return 0; }
   return 1
 }
@@ -64,11 +76,9 @@ wmi_file() {
       return 0
     fi
   done
-  for base in /sys/devices/platform/asus*; do
-    if [ -e "$base/$name" ]; then
-      printf '%s\n' "$base/$name"
-      return 0
-    fi
+  # Fallback: only match asus-nb-wmi or asus-wmi, not arbitrary asus* dirs
+  for base in /sys/devices/platform/asus-nb-wmi /sys/devices/platform/asus-wmi; do
+    : # already checked above
   done
   return 1
 }

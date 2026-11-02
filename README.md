@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="assets/logo.png" width="96" alt="ASUS Control Center logo">
+<img src="assets/asuscraft.svg" width="96" alt="ASUSCraft logo">
 
-# ASUS Control Center
+# ASUSCraft
 
 **Battery, performance, GPU and display controls for ASUS laptops on Linux.**
 
@@ -12,11 +12,11 @@
 ![GTK 4 + libadwaita](https://img.shields.io/badge/GTK_4-libadwaita-4a86cf)
 ![Fedora | Ubuntu | Mint | Zorin | Debian](https://img.shields.io/badge/Fedora%20%7C%20Ubuntu%20%7C%20Mint%20%7C%20Zorin%20%7C%20Debian-supported-success)
 
-<img src="docs/screenshots/light/home.png" alt="ASUS Control Center home page" width="900">
+<img src="docs/screenshots/light/home.png" alt="ASUSCraft home page" width="900">
 
 </div>
 
-ASUS Control Center puts the hardware information and the controls your ASUS laptop's firmware exposes into one GTK 4 window, in the spirit of MyASUS on Windows. It is an independent open-source project and is **not affiliated with or endorsed by ASUS**.
+ASUSCraft puts the hardware information and the controls your ASUS laptop's firmware exposes into one GTK 4 window, in the spirit of MyASUS on Windows. It is an independent open-source project and is **not affiliated with or endorsed by ASUS**.
 
 ## Features
 
@@ -198,7 +198,7 @@ Reports from more laptops are the most useful contribution. Please open a [compa
 
 ## Credits and license
 
-ASUS Control Center is free software under the [GNU GPL v3 or later](LICENSE).
+ASUSCraft is free software under the [GNU GPL v3 or later](LICENSE).
 
 OLED dimming uses a bundled, unmodified copy of [Soft Brightness Plus](https://github.com/jkitching/soft-brightness-plus) by Philippe Troin and Joel Kitching (GPL-3.0-or-later), see [data/soft-brightness-plus](data/soft-brightness-plus/README.md). Hardware control builds on the work of the [asus-linux](https://asus-linux.org) project and the Linux `asus-wmi` / `asus-armoury` drivers.
 

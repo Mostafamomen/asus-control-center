@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "mcui.h"
+#include "theme.h"
 
 /* ------------------------------------------------------------------ */
 /* basic text                                                          */
@@ -240,89 +241,29 @@ mc_gray_new (GtkWidget *child)
 }
 
 /* ---------------------------------------------------------- brand mark -- */
-/* Rounded-rect helper (cairo has no primitive for it). */
-static void
-round_rect (cairo_t *cr, double x, double y, double w, double h, double r)
-{
-  cairo_new_sub_path (cr);
-  cairo_arc (cr, x + w - r, y + r,     r, -G_PI / 2, 0);
-  cairo_arc (cr, x + w - r, y + h - r, r, 0,          G_PI / 2);
-  cairo_arc (cr, x + r,     y + h - r, r, G_PI / 2,   G_PI);
-  cairo_arc (cr, x + r,     y + r,     r, G_PI,       3 * G_PI / 2);
-  cairo_close_path (cr);
-}
-
-/* Design space is 256x256 (same numbers as assets/logo.svg); everything is
- * scaled from that, so a 22 px sidebar mark and a 116 px login mark are the
- * same artwork. A bitmap GtkPicture would advertise its 256 px texture as
- * the natural size and ignore the widget request — cairo cannot. */
-static void
-brand_draw (GtkDrawingArea *da, cairo_t *cr, int w, int h, gpointer user)
-{
-  (void) da;
-  (void) user;
-  double s = (double) MIN (w, h) / 256.0;
-  if (s <= 0)
-    return;
-
-  cairo_save (cr);
-  cairo_translate (cr, (w - 256 * s) / 2.0, (h - 256 * s) / 2.0);
-  cairo_scale (cr, s, s);
-
-  /* tile: diagonal gradient in the two MyASUS blues */
-  /* tile: one flat MyASUS blue — no gradients in this mark */
-  round_rect (cr, 8, 8, 240, 240, 58);
-  cairo_set_source_rgb (cr, 0.000, 0.424, 0.882);   /* #006CE1 */
-  cairo_fill (cr);
-
-  /* hairline highlight */
-  round_rect (cr, 8, 8, 240, 240, 58);
-  cairo_set_line_width (cr, 3);
-  cairo_set_source_rgba (cr, 1, 1, 1, 0.22);
-  cairo_stroke (cr);
-
-  /* dial ring: 270° with round ends, gap at the bottom */
-  cairo_set_line_width (cr, 24);
-  cairo_set_line_cap (cr, CAIRO_LINE_CAP_ROUND);
-  cairo_set_source_rgb (cr, 1, 1, 1);
-  cairo_arc (cr, 128, 128, 70, G_PI * 0.75, G_PI * 2.25);
-  cairo_stroke (cr);
-
-  /* needle */
-  cairo_set_source_rgb (cr, 1, 1, 1);
-  cairo_set_line_width (cr, 20);
-  cairo_move_to (cr, 128, 128);
-  cairo_line_to (cr, 172, 90);
-  cairo_stroke (cr);
-
-  /* hub */
-  cairo_set_source_rgb (cr, 1, 1, 1);
-  cairo_arc (cr, 128, 128, 17, 0, 2 * G_PI);
-  cairo_fill (cr);
-  cairo_set_source_rgb (cr, 0.000, 0.424, 0.882);   /* #006CE1 */
-  cairo_arc (cr, 128, 128, 7, 0, 2 * G_PI);
-  cairo_fill (cr);
-
-  cairo_restore (cr);
-}
-
 GtkWidget *
 mc_brand_mark_new (int px)
 {
-  GtkWidget *da = gtk_drawing_area_new ();
-  gtk_widget_add_css_class (da, "brandmark");
-  /* size request is the *only* determinant here: the drawing area has no
-   * intrinsic size, so the mark is exactly px x px at any scale factor */
-  gtk_widget_set_size_request (da, px, px);
-  gtk_widget_set_hexpand (da, FALSE);
-  gtk_widget_set_vexpand (da, FALSE);
-  gtk_widget_set_halign (da, GTK_ALIGN_CENTER);
-  gtk_widget_set_valign (da, GTK_ALIGN_CENTER);
-  gtk_drawing_area_set_content_width (GTK_DRAWING_AREA (da), px);
-  gtk_drawing_area_set_content_height (GTK_DRAWING_AREA (da), px);
-  gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (da), brand_draw, NULL,
-                                  NULL);
-  return da;
+  gchar *path = acc_asset_path ("asuscraft.png");
+  GtkWidget *mark;
+  if (path)
+    {
+      mark = gtk_image_new_from_file (path);
+      gtk_image_set_pixel_size (GTK_IMAGE (mark), px);
+      g_free (path);
+    }
+  else
+    {
+      mark = gtk_image_new_from_icon_name ("io.github.asuscontrolcenter.AsusControlCenter");
+      gtk_image_set_pixel_size (GTK_IMAGE (mark), px);
+    }
+  gtk_widget_add_css_class (mark, "brandmark");
+  gtk_widget_set_size_request (mark, px, px);
+  gtk_widget_set_hexpand (mark, FALSE);
+  gtk_widget_set_vexpand (mark, FALSE);
+  gtk_widget_set_halign (mark, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (mark, GTK_ALIGN_CENTER);
+  return mark;
 }
 
 void
