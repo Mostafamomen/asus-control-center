@@ -13,6 +13,7 @@
 #include "specs.h"
 #include "theme.h"
 #include "mcui.h"
+#include "sysdiag.h"
 #include "../i18n/i18n.h"
 #include "../control/asusd.h"
 #include "../control/ctl.h"
@@ -42,10 +43,6 @@ static GtkWidget *h_bat, *h_bat_health, *h_bat_cycles;
 static GtkWidget *h_fan_cpu, *h_fan_gpu, *h_cpu_temp, *h_nvme_temp;
 static GtkWidget *h_disp, *h_refresh, *h_brightness;
 
-static GtkWidget *d_bat, *d_thermal, *d_storage, *d_memory, *d_fans;
-static GtkWidget *d_wifi, *d_bt, *d_result, *d_services;
-static GtkWidget *p_bat, *p_thermal, *p_storage, *p_memory, *p_fans;
-static GtkWidget *p_asusd, *p_gfx, *p_helper;
 
 /* --------------------------------------------------------------- helpers */
 static void
@@ -65,18 +62,6 @@ static GtkWidget *
 kv (const gchar *label, GtkWidget **out)
 {
   return mc_row (label, out);
-}
-
-static void
-tone_pill (GtkWidget *w, const gchar *text, const gchar *tone)
-{
-  if (!w)
-    return;
-  gtk_label_set_text (GTK_LABEL (w), text);
-  gtk_widget_remove_css_class (w, "on");
-  gtk_widget_remove_css_class (w, "off");
-  gtk_widget_remove_css_class (w, "soon");
-  gtk_widget_add_css_class (w, tone);
 }
 
 static GtkWidget *
@@ -308,375 +293,10 @@ acc_page_hardware (AccUI *u)
 }
 
 /* ------------------------------------------------------------- diagnosis */
-static GtkWidget *
-diag_card (const gchar *icon, AccStr title, const gchar *label,
-           GtkWidget **out_value, GtkWidget **out_pill)
-{
-  GtkWidget *c = hw_card (icon, title);
-  GtkWidget *row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-  gtk_box_append (GTK_BOX (row), mc_label (label, "dim", 0));
-  GtkWidget *v = mc_label ("—", "val", 1);
-  gtk_widget_set_hexpand (v, TRUE);
-  gtk_box_append (GTK_BOX (row), v);
-  GtkWidget *p = mc_label ("—", "pill off", 1);
-  gtk_box_append (GTK_BOX (row), p);
-  gtk_box_append (GTK_BOX (c), row);
-  if (out_value)
-    *out_value = v;
-  if (out_pill)
-    *out_pill = p;
-  gtk_widget_set_size_request (c, 340, -1);
-  gtk_widget_set_hexpand (c, TRUE);
-  return c;
-}
-
-static void
-diag_run (void)
-{
-  BatInfo b;
-  HwInfo h;
-  LoadInfo ld;
-  battery_read (&b);
-  hwmon_read (&h);
-  acc_load_read (&ld);
-  acc_load_read (&ld);
-
-  gdouble health = (b.wh_full > 0 && b.wh_design > 0)
-                   ? b.wh_full / b.wh_design * 100.0 : -1.0;
-  gboolean warn = FALSE;
-  GString *s = g_string_new (NULL);
-
-  g_string_append_printf (s, "%s: ", acc_tr (ACC_T_HW_BATTERY));
-  if (health >= 0)
-    {
-      g_string_append_printf (s, "%.0f%%", health);
-      if (health < 80.0)
-        {
-          warn = TRUE;
-          tone_pill (p_bat, "!", "soon");
-        }
-      else
-        tone_pill (p_bat, "OK", "on");
-      set_text (d_bat, "%d%% · %.1f / %.1f Wh · %d",
-                b.capacity, b.wh_full, b.wh_design,
-                b.cycle_count >= 0 ? b.cycle_count : 0);
-    }
-  else
-    {
-      g_string_append (s, acc_tr (ACC_T_UNAVAILABLE));
-      tone_pill (p_bat, "—", "off");
-      set_text (d_bat, "%s", acc_tr (ACC_T_UNAVAILABLE));
-    }
-
-  g_string_append_printf (s, "\n%s: ", acc_tr (ACC_T_HW_COOLING));
-  if (h.t_cpu > 0)
-    {
-      g_string_append_printf (s, "CPU %.0f°C · NVMe %.0f°C", h.t_cpu,
-                              h.t_nvme > 0 ? h.t_nvme : 0.0);
-      if (h.t_cpu > 85.0)
-        {
-          warn = TRUE;
-          tone_pill (p_thermal, "!", "soon");
-        }
-      else
-        tone_pill (p_thermal, "OK", "on");
-      set_text (d_thermal, "CPU %.0f°C · %s %.0f°C", h.t_cpu,
-                "NVMe", h.t_nvme > 0 ? h.t_nvme : 0.0);
-    }
-  else
-    {
-      g_string_append (s, acc_tr (ACC_T_UNAVAILABLE));
-      tone_pill (p_thermal, "—", "off");
-      set_text (d_thermal, "%s", acc_tr (ACC_T_UNAVAILABLE));
-    }
-
-  g_string_append_printf (s, "\n%s: ", acc_tr (ACC_T_HW_STORAGE));
-  if (ld.disk_pct >= 0)
-    {
-      g_string_append_printf (s, "%.0f%%", ld.disk_pct);
-      if (ld.disk_pct > 90.0)
-        {
-          warn = TRUE;
-          tone_pill (p_storage, "!", "soon");
-        }
-      else
-        tone_pill (p_storage, "OK", "on");
-      set_text (d_storage, "%.0f%% · %.0f / %.0f GiB", ld.disk_pct,
-                ld.disk_used_gb, ld.disk_total_gb);
-    }
-  else
-    {
-      g_string_append (s, acc_tr (ACC_T_UNAVAILABLE));
-      tone_pill (p_storage, "—", "off");
-      set_text (d_storage, "%s", acc_tr (ACC_T_UNAVAILABLE));
-    }
-
-  g_string_append_printf (s, "\n%s: ", acc_tr (ACC_T_SYS_RAM));
-  if (ld.mem_pct >= 0)
-    {
-      g_string_append_printf (s, "%.0f%%", ld.mem_pct);
-      if (ld.mem_pct > 90.0)
-        {
-          warn = TRUE;
-          tone_pill (p_memory, "!", "soon");
-        }
-      else
-        tone_pill (p_memory, "OK", "on");
-      set_text (d_memory, "%.0f%% · %.1f / %.1f GiB", ld.mem_pct,
-                ld.mem_total_gb * ld.mem_pct / 100.0, ld.mem_total_gb);
-    }
-  else
-    {
-      g_string_append (s, acc_tr (ACC_T_UNAVAILABLE));
-      tone_pill (p_memory, "—", "off");
-      set_text (d_memory, "%s", acc_tr (ACC_T_UNAVAILABLE));
-    }
-
-  g_string_append_printf (s, "\n%s: ", acc_tr (ACC_T_HW_COOLING));
-  if (h.fans_ok)
-    {
-      g_string_append_printf (s, "CPU %d rpm · GPU %d rpm",
-                              h.fan_cpu, h.fan_gpu);
-      tone_pill (p_fans, "OK", "on");
-      set_text (d_fans, "CPU %d rpm · GPU %d rpm", h.fan_cpu, h.fan_gpu);
-    }
-  else
-    {
-      g_string_append (s, acc_tr (ACC_T_UNAVAILABLE));
-      tone_pill (p_fans, "—", "off");
-      set_text (d_fans, "%s", acc_tr (ACC_T_UNAVAILABLE));
-    }
-
-  AsusdProfileState ps;
-  gboolean asusd = acc_asusd_profiles (&ps) && ps.available;
-  AccGfxState gx;
-  acc_gfx_state (&gx);
-  gboolean gfx = gx.supergfxd_running;
-  gboolean helper = acc_ctl_available ();
-
-  g_string_append_printf (s, "\n%s: asusd %s · supergfxd %s · %s %s",
-                          acc_tr (ACC_T_SERVICE_STATUS),
-                          acc_tr (asusd ? ACC_T_RUNNING : ACC_T_STOPPED),
-                          acc_tr (gfx ? ACC_T_RUNNING : ACC_T_STOPPED),
-                          acc_tr (ACC_T_SERVICE_HELPER),
-                          acc_tr (helper ? ACC_T_INSTALLED : ACC_T_MISSING));
-  tone_pill (p_asusd, acc_tr (asusd ? ACC_T_RUNNING : ACC_T_STOPPED),
-             asusd ? "on" : "off");
-  /* ASUSCraft does not use supergfxd: running is a conflict risk, not OK */
-  tone_pill (p_gfx, acc_tr (gfx ? ACC_T_RUNNING : ACC_T_STOPPED),
-             gfx ? "soon" : "off");
-  if (gfx || gx.supergfx_leftover)
-    warn = TRUE;
-  tone_pill (p_helper, acc_tr (helper ? ACC_T_INSTALLED : ACC_T_MISSING),
-             helper ? "on" : "soon");
-  if (!helper)
-    warn = TRUE;
-  if (d_services)
-    set_text (d_services, "asusd %s · supergfxd %s · %s %s",
-              acc_tr (asusd ? ACC_T_RUNNING : ACC_T_STOPPED),
-              acc_tr (gfx ? ACC_T_RUNNING : ACC_T_STOPPED),
-              acc_tr (ACC_T_SERVICE_HELPER),
-              acc_tr (helper ? ACC_T_INSTALLED : ACC_T_MISSING));
-
-  gchar *head = g_strdup_printf ("%s\n", acc_tr (warn ? ACC_T_DIAG_WARN
-                                                      : ACC_T_DIAG_OK));
-  g_string_prepend (s, head);
-  g_free (head);
-  if (d_result)
-    gtk_label_set_text (GTK_LABEL (d_result), s->str);
-  g_string_free (s, TRUE);
-}
-
-static void
-diag_cb (GtkButton *b, gpointer user)
-{
-  (void) b;
-  (void) user;
-  diag_run ();
-}
-
-static gchar *
-wifi_iface (void)
-{
-  GDir *d = g_dir_open ("/sys/class/net", 0, NULL);
-  if (!d)
-    return NULL;
-  gchar *found = NULL;
-  const gchar *n;
-  while (!found && (n = g_dir_read_name (d)))
-    {
-      gchar *p = g_build_filename ("/sys/class/net", n, "wireless", NULL);
-      if (g_file_test (p, G_FILE_TEST_IS_DIR))
-        found = g_strdup (n);
-      g_free (p);
-    }
-  g_dir_close (d);
-  return found;
-}
-
-static gchar *
-wifi_ssid (const gchar *iface)
-{
-  if (!iface)
-    return NULL;
-  gchar *out = NULL;
-  gchar *argv[] = { (gchar *) "iw", (gchar *) "dev", (gchar *) iface,
-                    (gchar *) "link", NULL };
-  if (g_spawn_sync (NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
-                    &out, NULL, NULL, NULL) && out)
-    {
-      gchar *s = strstr (out, "SSID: ");
-      if (s)
-        {
-          s += 6;
-          gchar *e = strchr (s, '\n');
-          if (e)
-            *e = '\0';
-          gchar *r = g_strdup (s);
-          g_free (out);
-          return r;
-        }
-      g_free (out);
-    }
-  return NULL;
-}
-
-static gchar *
-bt_radio (void)
-{
-  GDir *d = g_dir_open ("/sys/class/rfkill", 0, NULL);
-  if (!d)
-    return NULL;
-  gchar *res = NULL;
-  const gchar *n;
-  while ((n = g_dir_read_name (d)))
-    {
-      gchar *tp = g_build_filename ("/sys/class/rfkill", n, "type", NULL);
-      gchar *type = NULL;
-      if (g_file_get_contents (tp, &type, NULL, NULL))
-        {
-          g_strstrip (type);
-          if (g_strcmp0 (type, "bluetooth") == 0)
-            {
-              gchar *sp = g_build_filename ("/sys/class/rfkill", n, "soft", NULL);
-              gchar *hp = g_build_filename ("/sys/class/rfkill", n, "hard", NULL);
-              gchar *sv = NULL, *hv = NULL;
-              gboolean on = g_file_get_contents (sp, &sv, NULL, NULL)
-                            && g_strcmp0 (g_strstrip (sv), "0") == 0;
-              if (on && g_file_get_contents (hp, &hv, NULL, NULL))
-                on = g_strcmp0 (g_strstrip (hv), "0") == 0;
-              g_free (sv);
-              g_free (hv);
-              g_free (sp);
-              g_free (hp);
-              res = g_strdup (on ? "on" : "off");
-            }
-          g_free (type);
-        }
-      g_free (tp);
-      if (res)
-        break;
-    }
-  g_dir_close (d);
-  return res;
-}
-
 GtkWidget *
 acc_page_diagnosis (AccUI *u)
 {
-  (void) u;
-  GtkWidget *page = gtk_box_new (GTK_ORIENTATION_VERTICAL, 14);
-  gtk_box_append (GTK_BOX (page), page_head (ACC_T_NAV_DIAG, ACC_T_SUB_DIAG));
-
-  /* report card */
-  GtkWidget *report = mc_panel (acc_tr (ACC_T_DIAG_HEAD));
-  GtkWidget *run = gtk_button_new_with_label (acc_tr (ACC_T_RUN_DIAG));
-  gtk_widget_add_css_class (run, "primarybtn");
-  gtk_widget_set_halign (run, GTK_ALIGN_START);
-  g_signal_connect (run, "clicked", G_CALLBACK (diag_cb), NULL);
-  gtk_box_append (GTK_BOX (report), run);
-  d_result = mc_label (acc_tr (ACC_T_DIAG_INIT), "diagreport", 0);
-  gtk_label_set_wrap (GTK_LABEL (d_result), TRUE);
-  gtk_label_set_selectable (GTK_LABEL (d_result), TRUE);
-  gtk_label_set_xalign (GTK_LABEL (d_result), 0.0);
-  gtk_box_append (GTK_BOX (report), d_result);
-  gtk_box_append (GTK_BOX (page), report);
-
-  GtkWidget *flow = gtk_flow_box_new ();
-  gtk_flow_box_set_selection_mode (GTK_FLOW_BOX (flow), GTK_SELECTION_NONE);
-  gtk_flow_box_set_homogeneous (GTK_FLOW_BOX (flow), TRUE);
-  gtk_flow_box_set_row_spacing (GTK_FLOW_BOX (flow), 14);
-  gtk_flow_box_set_column_spacing (GTK_FLOW_BOX (flow), 14);
-  gtk_flow_box_set_max_children_per_line (GTK_FLOW_BOX (flow), 3);
-  gtk_flow_box_set_min_children_per_line (GTK_FLOW_BOX (flow), 1);
-  gtk_flow_box_append (GTK_FLOW_BOX (flow),
-                       diag_card ("battery-symbolic", ACC_T_CHECK_BAT,
-                                  acc_tr (ACC_T_BAT_HEALTH), &d_bat, &p_bat));
-  gtk_flow_box_append (GTK_FLOW_BOX (flow),
-                       diag_card ("weather-clear-symbolic", ACC_T_CHECK_THERMAL,
-                                  acc_tr (ACC_T_TEMP), &d_thermal, &p_thermal));
-  gtk_flow_box_append (GTK_FLOW_BOX (flow),
-                       diag_card ("drive-harddisk-symbolic", ACC_T_CHECK_STORAGE,
-                                  acc_tr (ACC_T_TILE_DISK), &d_storage, &p_storage));
-  gtk_flow_box_append (GTK_FLOW_BOX (flow),
-                       diag_card ("media-memory-symbolic", ACC_T_CHECK_MEMORY,
-                                  acc_tr (ACC_T_TILE_MEM), &d_memory, &p_memory));
-  gtk_flow_box_append (GTK_FLOW_BOX (flow),
-                       diag_card ("weather-windy-symbolic", ACC_T_CHECK_FANS,
-                                  acc_tr (ACC_T_FANS_TREND), &d_fans, &p_fans));
-  gtk_box_append (GTK_BOX (page), flow);
-
-  /* service + connectivity card */
-  GtkWidget *svc = mc_panel (acc_tr (ACC_T_SERVICE_STATUS));
-  GtkWidget *rows = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-  {
-    GtkWidget *row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_box_append (GTK_BOX (row), mc_label ("asusd", "dim", 0));
-    p_asusd = mc_label ("—", "pill off", 1);
-    gtk_widget_set_hexpand (p_asusd, TRUE);
-    gtk_box_append (GTK_BOX (row), p_asusd);
-    gtk_box_append (GTK_BOX (rows), row);
-  }
-  {
-    GtkWidget *row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_box_append (GTK_BOX (row), mc_label ("supergfxd", "dim", 0));
-    p_gfx = mc_label ("—", "pill off", 1);
-    gtk_widget_set_hexpand (p_gfx, TRUE);
-    gtk_box_append (GTK_BOX (row), p_gfx);
-    gtk_box_append (GTK_BOX (rows), row);
-  }
-  {
-    GtkWidget *row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_box_append (GTK_BOX (row),
-                    mc_label (acc_tr (ACC_T_SERVICE_HELPER), "dim", 0));
-    p_helper = mc_label ("—", "pill off", 1);
-    gtk_widget_set_hexpand (p_helper, TRUE);
-    gtk_box_append (GTK_BOX (row), p_helper);
-    gtk_box_append (GTK_BOX (rows), row);
-  }
-  d_services = mc_label ("—", "foot", 0);
-  gtk_label_set_wrap (GTK_LABEL (d_services), TRUE);
-  gtk_box_append (GTK_BOX (rows), d_services);
-
-  gchar *iface = wifi_iface ();
-  gchar *ssid = wifi_ssid (iface);
-  gchar *bt = bt_radio ();
-  gtk_box_append (GTK_BOX (rows),
-                  kv (acc_tr (ACC_T_WIFI), &d_wifi));
-  set_text (d_wifi, "%s", ssid ? ssid : acc_tr (ACC_T_NOT_CONN));
-  gtk_box_append (GTK_BOX (rows), kv (acc_tr (ACC_T_BT), &d_bt));
-  set_text (d_bt, "%s", bt ? acc_tr (g_strcmp0 (bt, "on") == 0
-                                      ? ACC_T_ON : ACC_T_OFF)
-                           : acc_tr (ACC_T_UNAVAILABLE));
-  g_free (bt);
-  g_free (ssid);
-  g_free (iface);
-
-  gtk_box_append (GTK_BOX (svc), rows);
-  gtk_box_append (GTK_BOX (page), svc);
-
-  acc_hubs_refresh ();
-  return mc_page (page);
+  return acc_sysdiag_page (u);
 }
 
 /* ------------------------------------------------------- updates/support */
@@ -690,7 +310,7 @@ acc_page_updates (AccUI *u)
 void
 acc_hubs_refresh (void)
 {
-  if (!h_model && !d_result && !p_asusd)
+  if (!h_model)
     return;
 
   BatInfo b;
@@ -804,8 +424,6 @@ acc_hubs_refresh (void)
         set_text (h_brightness, "—");
     }
 
-  if (d_result)
-    diag_run ();
 }
 
 void
@@ -820,10 +438,7 @@ acc_hubs_teardown (void)
   h_bat = h_bat_health = h_bat_cycles = NULL;
   h_fan_cpu = h_fan_gpu = h_cpu_temp = h_nvme_temp = NULL;
   h_disp = h_refresh = h_brightness = NULL;
-  d_bat = d_thermal = d_storage = d_memory = d_fans = NULL;
-  d_wifi = d_bt = d_result = d_services = NULL;
-  p_bat = p_thermal = p_storage = p_memory = p_fans = NULL;
-  p_asusd = p_gfx = p_helper = NULL;
+  acc_sysdiag_teardown ();
 }
 
 /* --------------------------------------------------------------- router */

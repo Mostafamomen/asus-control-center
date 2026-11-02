@@ -196,6 +196,20 @@ static const gchar *EN[ACC_T_COUNT] = {
   "Install Fedora and firmware updates with GNOME Software (dnf).",
   "Start at login", "Open ASUSCraft automatically when you sign in.",
   "Notifications", "Show confirmations after hardware changes.",
+  "Copy report", "Run",
+  /* expanded Check Diagnostics */
+  "Hardware Checks", "Software Checks", "Run Group", "Launch Test",
+  "Screen", "Keyboard", "Touchpad / Touch",
+  "RAM", "USB Connections", "Memory Usage",
+  "Dead Pixel Check", "Press any key to see it light up. Press Esc or close the window when done.",
+  "Launch the screen test to check for dead pixels.",
+  "Screen test running — close the window when done.",
+  "Keyboard Test", "Press keys to light them up. Close the window when done.",
+  "Launch the keyboard test to check each key.",
+  "Keyboard test running — close the window when done.",
+  "Touchpad device present",
+  "No touchpad entry found in /proc/bus/input/devices",
+  "No non-hub USB devices found",
 };
 
 static const gchar *AR[ACC_T_COUNT] = {
@@ -389,6 +403,20 @@ static const gchar *AR[ACC_T_COUNT] = {
   "ثبّت تحديثات فيدورا والبرمجية الثابتة عبر GNOME Software (dnf).",
   "التشغيل عند تسجيل الدخول", "افتح ASUSCraft تلقائيًا عند تسجيل الدخول.",
   "الإشعارات", "اعرض تأكيدات بعد تغييرات العتاد.",
+  "نسخ التقرير", "تشغيل",
+  /* expanded Check Diagnostics */
+  "فحوصات العتاد", "فحوصات البرمجيات", "تشغيل المجموعة", "تشغيل الاختبار",
+  "الشاشة", "لوحة المفاتيح", "لوحة اللمس",
+  "الذاكرة RAM", "اتصالات USB", "استخدام الذاكرة",
+  "فحص البكسل الميت", "اضغط أي مفتاح لتراه يضيء. اضغط Esc أو أغلق النافذة عند الانتهاء.",
+  "شغّل اختبار الشاشة للكشف عن البكسل الميت.",
+  "اختبار الشاشة قيد التشغيل — أغلق النافذة عند الانتهاء.",
+  "اختبار لوحة المفاتيح", "اضغط المفاتيح لتراها تضيء. أغلق النافذة عند الانتهاء.",
+  "شغّل اختبار لوحة المفاتيح لفحص كل مفتاح.",
+  "اختبار لوحة المفاتيح قيد التشغيل — أغلق النافذة عند الانتهاء.",
+  "تم العثور على لوحة اللمس",
+  "لم يُعثر على لوحة لمس في /proc/bus/input/devices",
+  "لا أجهزة USB غير المراكز الجذرية",
 };
 
 /* count mismatch guard: arrays must both be exactly ACC_T_COUNT long */
