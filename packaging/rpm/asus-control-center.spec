@@ -1,5 +1,5 @@
 Name:           asus-control-center
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        Battery, performance, GPU and display controls for ASUS laptops
 
@@ -62,6 +62,10 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.asus
 %{_datadir}/asus-control-center/
 
 %changelog
+* Mon Nov 02 2026 Mostafa Momen <mostafamomen6521@gmail.com> - 0.6.0-1
+- GPU: fix MUX double-write, verify switch after reboot
+- Integrated (Intel Arc) shown unavailable with the reason
+
 * Thu Oct 29 2026 Mostafa Momen <mostafamomen6521@gmail.com> - 0.4.0-1
 - First packaged release: RPM and Debian packages
 - Separate hardware backlight slider next to OLED dimming
