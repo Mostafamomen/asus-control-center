@@ -39,7 +39,25 @@ Controls your laptop does not expose stay disabled instead of failing.
 | ![GPU](docs/screenshots/light/gpu.png) | ![GPU, dark](docs/screenshots/dark/gpu.png) |
 | ![Performance](docs/screenshots/light/performance.png) | ![Performance, dark](docs/screenshots/dark/performance.png) |
 | ![Display](docs/screenshots/light/display.png) | ![Display, dark](docs/screenshots/dark/display.png) |
-| ![System info](docs/screenshots/light/system.png) | ![Home, dark](docs/screenshots/dark/home.png) |
+| ![System info](docs/screenshots/light/system.png) | ![Home, dark](docs/screenshots/dark/Home.png) |
+
+### More screens (light)
+
+| | |
+|---|---|
+| ![Home](<docs/images/Light Mode/Home.png>) | ![Customization](<docs/images/Light Mode/Customization.png>) |
+| ![Battery](<docs/images/Light Mode/Battery.png>) | ![Hardware](<docs/images/Light Mode/Hardware.png>) |
+| ![System diagnosis](<docs/images/Light Mode/System Diagnosis.png>) | ![Updates and support](<docs/images/Light Mode/Updates and support.png>) |
+| ![Settings](<docs/images/Light Mode/Settings.png>) |  |
+
+### More screens (dark)
+
+| | |
+|---|---|
+| ![Customization](<docs/images/Dark/cutumization.png>) | ![Graphics](<docs/images/Dark/Graphics.png>) |
+| ![Hardware](<docs/images/Dark/Hardware.png>) | ![Display](<docs/images/Dark/Display .png>) |
+| ![System diagnosis](<docs/images/Dark/system Diagnosis.png>) | ![Updates and support](<docs/images/Dark/Updates and support.png>) |
+| ![Battery](<docs/images/Dark/Battery.png>) |  |
 
 ## Install
 
