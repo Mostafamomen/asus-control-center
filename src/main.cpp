@@ -105,7 +105,7 @@ self_test (void)
   acc_brightness_init (NULL, NULL);   /* for the OLED dim availability line */
 
   g_print ("==========================================================\n");
-  g_print ("  ASUS Control Center — laptop report (read-only)\n");
+  g_print ("  ASUSCraft — laptop report (read-only)\n");
   g_print ("==========================================================\n");
 
   /* ---------------- device ---------------- */
@@ -464,6 +464,13 @@ on_shutdown (GtkApplication *app, gpointer user)
 int
 main (int argc, char **argv)
 {
+  if (argc > 1 && (strcmp (argv[1], "--version") == 0
+                   || strcmp (argv[1], "-v") == 0))
+    {
+      g_print ("asuscraft %s\n", ACC_VERSION);
+      return 0;
+    }
+
   if (argc > 1 && (strcmp (argv[1], "--self-test") == 0
                    || strcmp (argv[1], "--specs") == 0))
     {

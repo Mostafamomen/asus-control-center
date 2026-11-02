@@ -24,7 +24,7 @@ Recommends:     iw
 Suggests:       gnome-shell
 
 %description
-ASUS Control Center is a community-built GTK 4 / libadwaita app that brings
+ASUSCraft is a community-built GTK 4 / libadwaita app that brings
 the hardware information and controls of an ASUS laptop into one window:
 battery charge limits, performance profiles, GPU MUX and iGPU-only modes,
 keyboard lighting, fan and temperature monitoring, and OLED-friendly

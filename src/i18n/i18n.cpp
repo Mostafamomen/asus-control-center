@@ -173,6 +173,25 @@ static const gchar *EN[ACC_T_COUNT] = {
   "OLED dimming installed. Log out and back in, then use the slider.",
   "OLED dimming enabled. If the slider does nothing yet, log out and back in.",
   "Could not set up OLED dimming. See the terminal for details.",
+  /* ASUSCraft sections */
+  "Customization", "Hardware", "System Diagnosis", "Updates & Support",
+  "Tune performance, battery care, graphics and display.",
+  "Live CPU, GPU, memory, storage and thermal details.",
+  "Check sensors and services, then run a real diagnostic report.",
+  "Software status, drivers and official ASUS support.",
+  "Performance", "Battery care", "Graphics", "Display",
+  "Device", "Processor", "Graphics", "Memory", "Storage",
+  "Battery health", "Cooling", "Display",
+  "Current load", "Used", "Unavailable on this laptop",
+  "Service status", "asusd", "supergfxd", "Control helper",
+  "Running", "Stopped", "Installed", "Missing",
+  "Diagnostic report", "Run a check to read the current state.",
+  "Battery health check", "Thermal check", "Storage check",
+  "Memory check", "Fan check", "Service check",
+  "ASUSCraft", "System updates",
+  "Install Fedora and firmware updates with GNOME Software (dnf).",
+  "Start at login", "Open ASUSCraft automatically when you sign in.",
+  "Notifications", "Show confirmations after hardware changes.",
 };
 
 static const gchar *AR[ACC_T_COUNT] = {
@@ -343,6 +362,25 @@ static const gchar *AR[ACC_T_COUNT] = {
   "تم تثبيت تعتيم OLED. سجّل الخروج ثم الدخول، ثم استخدم شريط التمرير.",
   "تم تفعيل تعتيم OLED. إذا لم يعمل الشريط بعد، سجّل الخروج ثم الدخول.",
   "تعذّر إعداد تعتيم OLED. راجع الطرفية للتفاصيل.",
+  /* ASUSCraft sections */
+  "التخصيص", "العتاد", "تشخيص النظام", "التحديثات والدعم",
+  "اضبط الأداء والعناية بالبطارية والرسوميات والشاشة.",
+  "تفاصيل حيّة عن المعالج والرسوميات والذاكرة والتخزين والحرارة.",
+  "افحص المستشعرات والخدمات ثم شغّل تقرير تشخيص حقيقيًا.",
+  "حالة البرمجيات والتعريفات ودعم ASUS الرسمي.",
+  "الأداء", "العناية بالبطارية", "الرسوميات", "الشاشة",
+  "الجهاز", "المعالج", "الرسوميات", "الذاكرة", "التخزين",
+  "صحة البطارية", "التبريد", "الشاشة",
+  "الحمل الحالي", "المستخدم", "غير متاح على هذا الحاسوب",
+  "حالة الخدمات", "asusd", "supergfxd", "مساعد التحكم",
+  "قيد التشغيل", "متوقفة", "مثبّت", "غير موجود",
+  "تقرير التشخيص", "شغّل الفحص لقراءة الحالة الحالية.",
+  "فحص صحة البطارية", "فحص الحرارة", "فحص التخزين",
+  "فحص الذاكرة", "فحص المراوح", "فحص الخدمات",
+  "ASUSCraft", "تحديثات النظام",
+  "ثبّت تحديثات فيدورا والبرمجية الثابتة عبر GNOME Software (dnf).",
+  "التشغيل عند تسجيل الدخول", "افتح ASUSCraft تلقائيًا عند تسجيل الدخول.",
+  "الإشعارات", "اعرض تأكيدات بعد تغييرات العتاد.",
 };
 
 /* count mismatch guard: arrays must both be exactly ACC_T_COUNT long */

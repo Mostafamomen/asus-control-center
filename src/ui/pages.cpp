@@ -81,8 +81,6 @@ static GtkWidget *f_conn_wifi, *f_conn_wifi_sub, *f_conn_bt;
 /* settings page */
 static GtkWidget *f_helper;
 /* support page */
-static GtkWidget *f_diag_res;
-
 /* ------------------------------------------------ helpers ------------
  * Thin local aliases over the reusable MyASUS UI kit (ui/mcui.h) — the
  * library owns the widget construction and the CSS-class contract. */
@@ -1587,6 +1585,34 @@ theme_sw_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
     acc_ui_theme_toggle ();   /* rebuilds the UI in the new skin */
 }
 
+static void
+autostart_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
+{
+  (void) ps;
+  (void) user;
+  if (s_sync)
+    return;
+  gchar *err = NULL;
+  gboolean on = gtk_switch_get_active (sw);
+  if (!acc_autostart_set (on, &err))
+    {
+      g_printerr ("autostart: %s\n", err ? err : "?");
+      acc_ui_toast (acc_tr (ACC_T_WRERR));
+      gtk_switch_set_active (sw, !on);
+    }
+  g_free (err);
+}
+
+static void
+notify_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
+{
+  (void) ps;
+  (void) user;
+  if (s_sync)
+    return;
+  acc_pref_set_notifications (gtk_switch_get_active (sw));
+}
+
 GtkWidget *
 acc_page_settings (AccUI *u)
 {
@@ -1658,6 +1684,40 @@ acc_page_settings (AccUI *u)
     gtk_box_append (GTK_BOX (theme_row), tsw);
     gtk_box_append (GTK_BOX (ctl), theme_row);
 
+    /* launch at login: writes/removes a per-user XDG autostart entry */
+    GtkWidget *start_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *start_txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
+    gtk_box_append (GTK_BOX (start_txt),
+                    w_lbl (acc_tr (ACC_T_AUTOSTART), "dim", 0));
+    GtkWidget *start_sub = w_lbl (acc_tr (ACC_T_AUTOSTART_SUB), "foot", 0);
+    gtk_label_set_wrap (GTK_LABEL (start_sub), TRUE);
+    gtk_box_append (GTK_BOX (start_txt), start_sub);
+    gtk_widget_set_hexpand (start_txt, TRUE);
+    gtk_box_append (GTK_BOX (start_row), start_txt);
+    GtkWidget *start_sw = gtk_switch_new ();
+    gtk_switch_set_active (GTK_SWITCH (start_sw), acc_autostart_enabled ());
+    gtk_widget_set_valign (start_sw, GTK_ALIGN_CENTER);
+    g_signal_connect (start_sw, "state-set", G_CALLBACK (autostart_cb), NULL);
+    gtk_box_append (GTK_BOX (start_row), start_sw);
+    gtk_box_append (GTK_BOX (ctl), start_row);
+
+    /* notifications: persisted and honoured by the toast layer */
+    GtkWidget *notify_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *notify_txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
+    gtk_box_append (GTK_BOX (notify_txt),
+                    w_lbl (acc_tr (ACC_T_NOTIFY), "dim", 0));
+    GtkWidget *notify_sub = w_lbl (acc_tr (ACC_T_NOTIFY_SUB), "foot", 0);
+    gtk_label_set_wrap (GTK_LABEL (notify_sub), TRUE);
+    gtk_box_append (GTK_BOX (notify_txt), notify_sub);
+    gtk_widget_set_hexpand (notify_txt, TRUE);
+    gtk_box_append (GTK_BOX (notify_row), notify_txt);
+    GtkWidget *notify_sw = gtk_switch_new ();
+    gtk_switch_set_active (GTK_SWITCH (notify_sw), acc_pref_notifications ());
+    gtk_widget_set_valign (notify_sw, GTK_ALIGN_CENTER);
+    g_signal_connect (notify_sw, "state-set", G_CALLBACK (notify_cb), NULL);
+    gtk_box_append (GTK_BOX (notify_row), notify_sw);
+    gtk_box_append (GTK_BOX (ctl), notify_row);
+
     gtk_box_append (GTK_BOX (block), ctl);
   }
   gtk_box_append (GTK_BOX (li), block);
@@ -1699,75 +1759,47 @@ acc_page_settings (AccUI *u)
 }
 
 /* ------------------------------------------------ support page ------- */
-static void
-diag_cb (GtkButton *b, gpointer u)
-{
-  (void) b;
-  (void) u;
-  BatInfo bat;
-  HwInfo h;
-  LoadInfo ld;
-  battery_read (&bat);
-  hwmon_read (&h);
-  acc_load_read (&ld);
-  acc_load_read (&ld);   /* second sample so CPU% has a delta */
-
-  gboolean warn = FALSE;
-  GString *s = g_string_new (NULL);
-
-  g_string_append_printf (s, "%s ", acc_tr (ACC_T_NAV_BAT));
-  if (bat.wh_now > 0 && bat.wh_design > 0)
-    {
-      gdouble hp = bat.wh_now / bat.wh_design * 100.0;
-      g_string_append_printf (s, "%.0f%%", hp);
-      if (hp < 80.0)
-        warn = TRUE;
-    }
-  else
-    g_string_append (s, "—");
-
-  g_string_append_printf (s, "   ·   %s ", acc_tr (ACC_T_CPU));
-  if (h.t_cpu > 0)
-    {
-      g_string_append_printf (s, "%.0f°C", h.t_cpu);
-      if (h.t_cpu > 85.0)
-        warn = TRUE;
-    }
-  else
-    g_string_append (s, "—");
-
-  g_string_append_printf (s, "   ·   %s ", acc_tr (ACC_T_TILE_DISK));
-  if (ld.disk_pct >= 0)
-    {
-      g_string_append_printf (s, "%.0f%%", ld.disk_pct);
-      if (ld.disk_pct > 90.0)
-        warn = TRUE;
-    }
-  else
-    g_string_append (s, "—");
-
-  g_string_append_printf (s, "   ·   %s ", acc_tr (ACC_T_TILE_MEM));
-  if (ld.mem_pct >= 0)
-    {
-      g_string_append_printf (s, "%.0f%%", ld.mem_pct);
-      if (ld.mem_pct > 90.0)
-        warn = TRUE;
-    }
-  else
-    g_string_append (s, "—");
-
-  g_string_append (s, "\n");
-  g_string_append (s, acc_tr (warn ? ACC_T_DIAG_WARN : ACC_T_DIAG_OK));
-  gtk_label_set_text (GTK_LABEL (f_diag_res), s->str);
-  g_string_free (s, TRUE);
-}
-
 GtkWidget *
 acc_page_support (AccUI *u)
 {
   (void) u;
-  GtkWidget *c = w_picard (acc_tr (ACC_T_SUPPORT));
+  GtkWidget *c = w_picard (acc_tr (ACC_T_NAV_UPD));
   GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
+
+  /* software status: facts read from this install, never invented */
+  {
+    GtkWidget *status = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
+
+    GtkWidget *ver = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (ver), w_lbl (acc_tr (ACC_T_UPD_APP), "dim", 0));
+    gtk_box_append (GTK_BOX (ver), w_lbl (ACC_VERSION, "val", 1));
+    gtk_box_append (GTK_BOX (status), ver);
+
+    GtkWidget *helper = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (helper),
+                    w_lbl (acc_tr (ACC_T_SERVICE_HELPER), "dim", 0));
+    gtk_box_append (GTK_BOX (helper),
+                    w_lbl (acc_tr (acc_ctl_available () ? ACC_T_INSTALLED
+                                                       : ACC_T_MISSING),
+                           "val", 1));
+    gtk_box_append (GTK_BOX (status), helper);
+
+    GtkWidget *svc = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (svc), w_lbl ("asusd", "dim", 0));
+    gtk_box_append (GTK_BOX (svc),
+                    w_lbl (acc_tr (acc_asusd_available () ? ACC_T_RUNNING
+                                                         : ACC_T_STOPPED),
+                           "val", 1));
+    gtk_box_append (GTK_BOX (status), svc);
+
+    GtkWidget *guide = w_lbl (acc_tr (ACC_T_UPD_GUIDE), "cardtitle", 0);
+    gtk_box_append (GTK_BOX (status), guide);
+    GtkWidget *body = w_lbl (acc_tr (ACC_T_UPD_GUIDE_BODY), "foot", 0);
+    gtk_label_set_wrap (GTK_LABEL (body), TRUE);
+    gtk_box_append (GTK_BOX (status), body);
+    gtk_box_append (GTK_BOX (li), status);
+    gtk_box_append (GTK_BOX (li), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
+  }
 
   /* warranty — honestly handled on ASUS's own site */
   {
@@ -1825,26 +1857,25 @@ acc_page_support (AccUI *u)
     gtk_box_append (GTK_BOX (li), row);
   }
 
-  /* diagnostics — real sensor readings, run on demand */
+  /* diagnosis now lives in its own top-level section */
   {
     GtkWidget *ctl;
     GtkWidget *row = w_feat ("applications-utilities-symbolic",
                              acc_tr (ACC_T_DIAG_TITLE),
                              acc_tr (ACC_T_DIAG_SUB), &ctl);
-    GtkWidget *run = gtk_button_new_with_label (acc_tr (ACC_T_RUN_DIAG));
-    gtk_widget_add_css_class (run, "primarybtn");
-    gtk_widget_set_halign (run, GTK_ALIGN_END);
-    g_signal_connect (run, "clicked", G_CALLBACK (diag_cb), NULL);
-    gtk_box_append (GTK_BOX (ctl), run);
-    f_diag_res = w_lbl ("—", "dim", 0);
-    gtk_label_set_wrap (GTK_LABEL (f_diag_res), TRUE);
-    gtk_widget_set_hexpand (f_diag_res, TRUE);
-    gtk_box_append (GTK_BOX (ctl), f_diag_res);
+    GtkWidget *go = gtk_button_new_with_label (acc_tr (ACC_T_NAV_DIAG));
+    gtk_widget_add_css_class (go, "primarybtn");
+    gtk_widget_set_halign (go, GTK_ALIGN_END);
+    g_signal_connect (go, "clicked",
+                      G_CALLBACK (+[] (GtkButton *, gpointer) {
+                        acc_ui_nav_to ("diagnosis");
+                      }), NULL);
+    gtk_box_append (GTK_BOX (ctl), go);
     gtk_box_append (GTK_BOX (li), row);
   }
 
   gtk_box_append (GTK_BOX (c), li);
-  return w_page_titled (c, ACC_T_SUPPORT);
+  return w_page_titled (c, ACC_T_NAV_UPD);
 }
 
 void
@@ -1873,11 +1904,12 @@ acc_page_refresh (AccUI *u)
       gtk_label_set_text (GTK_LABEL (f_bat_whf), b.wh_design > 0 ? buf : "—");
       g_snprintf (buf, sizeof buf, "%d", b.cycle_count);
       gtk_label_set_text (GTK_LABEL (f_bat_cyc), b.cycle_count >= 0 ? buf : "—");
-      /* honest health number: needs both readings to be meaningful */
+      /* honest health number: full-charge capacity vs design capacity.
+       * wh_now is the current charge and must never be used here. */
       gtk_label_set_text (GTK_LABEL (f_bat_health),
-                          (b.wh_now > 0 && b.wh_design > 0)
+                          (b.wh_full > 0 && b.wh_design > 0)
                           ? (g_snprintf (buf, sizeof buf, "%.0f%%",
-                                         b.wh_now / b.wh_design * 100.0), buf)
+                                         b.wh_full / b.wh_design * 100.0), buf)
                           : "—");
 
       gchar *thrf = acc_dev_charge_limit_file ();
@@ -2245,5 +2277,4 @@ acc_page_teardown (void)
   f_sys_os = f_sys_cpu = f_sys_ram = f_sys_ssd = f_sys_bios = f_sys_kernel = NULL;
   f_conn_wifi = f_conn_wifi_sub = f_conn_bt = NULL;
   f_helper = NULL;
-  f_diag_res = NULL;
 }

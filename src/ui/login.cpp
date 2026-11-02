@@ -387,9 +387,9 @@ brand_panel (void)
   gtk_widget_set_margin_start (inner, 40);
   gtk_widget_set_margin_end (inner, 40);
 
-  /* original app logo (assets/logo.png, drawn in logo.svg) */
+  /* ASUSCraft app logo, rendered from assets/asuscraft.svg */
   {
-    gchar *lp = acc_asset_path ("logo.png");
+    gchar *lp = acc_asset_path ("asuscraft.png");
     GtkWidget *pic;
     if (lp)
       {
@@ -411,7 +411,7 @@ brand_panel (void)
   }
 
   gtk_box_append (GTK_BOX (inner),
-                  label ("ASUS Control Center", "loginbrandtitle", 0.5f));
+                  label ("ASUSCraft", "loginbrandtitle", 0.5f));
   {
     GtkWidget *s = label (acc_tr (ACC_T_LOGIN_BRAND_SUB),
                           "loginbrandsub", 0.5f);
@@ -442,14 +442,14 @@ build_window (GtkApplication *app, gboolean create)
   L->done = FALSE;
 
   L->win = GTK_WIDGET (adw_application_window_new (app));
-  gtk_window_set_title (GTK_WINDOW (L->win), "ASUS Control Center");
+  gtk_window_set_title (GTK_WINDOW (L->win), "ASUSCraft");
   gtk_window_set_default_size (GTK_WINDOW (L->win), 940, 700);
 
   /* slim header bar: window controls + light/dark + language, no duplicate title */
   GtkWidget *tv = adw_toolbar_view_new ();
   GtkWidget *hb = gtk_header_bar_new ();
   {
-    GtkWidget *t = gtk_label_new ("ASUS Control Center");
+    GtkWidget *t = gtk_label_new ("ASUSCraft");
     gtk_widget_add_css_class (t, "hbtitle");
     gtk_header_bar_set_title_widget (GTK_HEADER_BAR (hb), t);
 

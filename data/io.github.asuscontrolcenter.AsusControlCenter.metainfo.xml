@@ -4,14 +4,14 @@
   <id>io.github.asuscontrolcenter.AsusControlCenter</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
-  <name>ASUS Control Center</name>
-  <summary>Battery, performance, GPU and display controls for ASUS laptops</summary>
+  <name>ASUSCraft</name>
+  <summary>Intelligent ASUS Laptop Management</summary>
   <developer id="io.github.mostafamomen">
     <name>Mostafa Momen</name>
   </developer>
   <description>
     <p>
-      ASUS Control Center is a community-built app that brings the hardware
+      ASUSCraft is a community-built app that brings the hardware
       information and controls of an ASUS laptop into one window. It is not
       affiliated with or endorsed by ASUS.
     </p>
