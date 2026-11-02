@@ -1,5 +1,5 @@
 Name:           asus-control-center
-Version:        0.4.0
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Battery, performance, GPU and display controls for ASUS laptops
 
@@ -56,6 +56,7 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.asus
 %{_datadir}/polkit-1/actions/io.github.asuscontrolcenter.AsusControlCenter.policy
 %{_datadir}/applications/io.github.asuscontrolcenter.AsusControlCenter.desktop
 %{_datadir}/icons/hicolor/scalable/apps/io.github.asuscontrolcenter.AsusControlCenter.svg
+%{_datadir}/icons/hicolor/*/apps/io.github.asuscontrolcenter.AsusControlCenter.png
 %{_metainfodir}/io.github.asuscontrolcenter.AsusControlCenter.metainfo.xml
 %{_mandir}/man1/asus-control-center.1*
 %{_datadir}/asus-control-center/
