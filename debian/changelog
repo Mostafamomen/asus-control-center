@@ -1,3 +1,22 @@
+asus-control-center (1.0.0) unstable; urgency=medium
+
+  * System Manager: health overview, CPU/RAM monitoring, Smart Recommendations,
+    Quick Actions, health history.
+  * Software Center: installed apps, pending updates, driver and diagnostics.
+  * Fix memory leak in health-history directory creation.
+  * Fix stale helper exit code on spawn failure.
+  * Fix health_history.txt file permissions (0600).
+  * Fix dead code in autostart scanner (system entries now counted).
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Mon, 03 Nov 2026 12:00:00 +0300
+
+asus-control-center (0.9.0) unstable; urgency=medium
+
+  * System Manager and Software Center pages added.
+  * System Diagnosis: Hardware and Software check groups expanded.
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Sun, 02 Nov 2026 22:00:00 +0300
+
 asus-control-center (0.6.0) unstable; urgency=medium
 
   * GPU: fix MUX double-write, verify switch after reboot.

@@ -10,6 +10,8 @@
 #include <glib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <initializer_list>
+#include <vector>
 
 static GtkWidget *sc_apps, *sc_updates, *sc_drivers, *sc_diag;
 
@@ -24,6 +26,14 @@ run_cmd (const gchar *const *argv)
     return out;
   g_free (out);
   return NULL;
+}
+
+static gchar *
+run_cmd (std::initializer_list<const gchar *> args)
+{
+  std::vector<const gchar *> v (args);
+  v.push_back (NULL);
+  return run_cmd (v.data ());
 }
 
 static void
@@ -55,9 +65,9 @@ static gpointer
 scan_apps (gpointer data)
 {
   (void) data;
-  gchar *rpm = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *rpm = run_cmd ({ "sh", "-c",
     "rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\\n' 2>/dev/null | head -40", NULL });
-  gchar *flat = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *flat = run_cmd ({ "sh", "-c",
     "flatpak list --app --columns=application,version 2>/dev/null | head -40", NULL });
   GString *s = g_string_new (NULL);
   g_string_append (s, "RPM packages (first 40):\\n");
@@ -77,11 +87,11 @@ static gpointer
 scan_updates (gpointer data)
 {
   (void) data;
-  gchar *dnf = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *dnf = run_cmd ({ "sh", "-c",
     "command -v dnf >/dev/null && dnf check-update -q 2>/dev/null | head -30 || echo 'DNF unavailable'", NULL });
-  gchar *flat = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *flat = run_cmd ({ "sh", "-c",
     "command -v flatpak >/dev/null && flatpak remote-ls --updates 2>/dev/null | head -30 || echo 'Flatpak unavailable'", NULL });
-  gchar *fw = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *fw = run_cmd ({ "sh", "-c",
     "command -v fwupdmgr >/dev/null && fwupdmgr get-updates 2>/dev/null | head -30 || echo 'fwupd unavailable'", NULL });
   GString *s = g_string_new (NULL);
   g_string_append (s, "DNF updates:\\n");
@@ -102,10 +112,10 @@ static gpointer
 scan_drivers (gpointer data)
 {
   (void) data;
-  gchar *kernel = run_cmd ((const gchar *[]) { "uname", "-r", NULL });
-  gchar *nvidia = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *kernel = run_cmd ({ "uname", "-r", NULL });
+  gchar *nvidia = run_cmd ({ "sh", "-c",
     "nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>/dev/null || echo 'NVIDIA unavailable'", NULL });
-  gchar *lspci = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *lspci = run_cmd ({ "sh", "-c",
     "lspci | grep -iE 'vga|3d|display' 2>/dev/null", NULL });
   GString *s = g_string_new (NULL);
   g_string_append_printf (s, "Kernel: %s\\n", kernel ? g_strstrip (kernel) : "unknown");
@@ -126,7 +136,7 @@ static gpointer
 scan_diag (gpointer data)
 {
   (void) data;
-  gchar *tools = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *tools = run_cmd ({ "sh", "-c",
     "for t in dnf flatpak fwupdmgr rpm; do command -v $t >/dev/null && echo \"$t: available\" || echo \"$t: missing\"; done", NULL });
   GString *s = g_string_new (NULL);
   g_string_append (s, "Software diagnostics:\\n");

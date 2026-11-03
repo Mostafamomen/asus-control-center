@@ -12,6 +12,8 @@
 #include <glib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <initializer_list>
+#include <vector>
 
 static GtkWidget *sm_health, *sm_storage, *sm_startup, *sm_proc, *sm_cleanup, *sm_updates;
 static GtkWidget *sm_overall, *sm_cpu, *sm_ram;
@@ -31,6 +33,14 @@ run_cmd (const gchar *const *argv)
     return out;
   g_free (out);
   return NULL;
+}
+
+static gchar *
+run_cmd (std::initializer_list<const gchar *> args)
+{
+  std::vector<const gchar *> v (args);
+  v.push_back (NULL);
+  return run_cmd (v.data ());
 }
 
 static void
@@ -110,7 +120,7 @@ proc_scan_thread (gpointer data)
   if (sm_proc_busy)
     return NULL;
   sm_proc_busy = TRUE;
-  gchar *out = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *out = run_cmd ({ "sh", "-c",
     "ps -eo pid,pcpu,pmem,comm --sort=-pmem | head -8", NULL });
   g_idle_add (update_proc_idle, out);
   return NULL;
@@ -135,7 +145,7 @@ storage_scan_thread (gpointer data)
   (void) data;
   LoadInfo ld;
   acc_load_read (&ld);
-  gchar *cache = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *cache = run_cmd ({ "sh", "-c",
     "du -sh ~/.cache 2>/dev/null | cut -f1", NULL });
   GString *s = g_string_new (NULL);
   if (ld.disk_total_gb > 0)
@@ -159,7 +169,7 @@ static void
 run_health (void)
 {
   GString *s = g_string_new (NULL);
-  gchar *failed = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *failed = run_cmd ({ "sh", "-c",
     "systemctl --failed --no-pager 2>/dev/null | sed -n '1,8p'", NULL });
   if (failed && *failed)
     g_string_append_printf (s, "Failed services:\\n%s\\n", g_strstrip (failed));
@@ -167,7 +177,7 @@ run_health (void)
     g_string_append_printf (s, "%s\\n", acc_tr (ACC_T_SM_NO_FAILED));
   g_free (failed);
 
-  gchar *tools = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *tools = run_cmd ({ "sh", "-c",
     "command -v dnf >/dev/null && echo 'DNF: available' || echo 'DNF: unavailable'; "
     "command -v flatpak >/dev/null && echo 'Flatpak: available' || echo 'Flatpak: unavailable'; "
     "command -v fwupdmgr >/dev/null && echo 'fwupd: available' || echo 'fwupd: unavailable'", NULL });
@@ -191,7 +201,7 @@ run_health (void)
     g_string_append (r, "Low storage: review Storage Manager.\n");
   if (ld2.mem_pct > 90.0)
     g_string_append (r, "High RAM usage: inspect Process Manager.\n");
-  gchar *failed_svc = run_cmd ((const gchar *[]) { "sh", "-c", "systemctl --failed --no-pager 2>/dev/null | grep -c failed", NULL });
+  gchar *failed_svc = run_cmd ({ "sh", "-c", "systemctl --failed --no-pager 2>/dev/null | grep -c failed", NULL });
   if (failed_svc && atoi (failed_svc) > 0)
     g_string_append (r, "Failed services detected: open System Diagnosis.\n");
   g_free (failed_svc);
@@ -257,7 +267,7 @@ run_health (void)
 static void
 run_updates (void)
 {
-  gchar *out = run_cmd ((const gchar *[]) { "sh", "-c",
+  gchar *out = run_cmd ({ "sh", "-c",
     "command -v dnf >/dev/null && echo 'DNF available' || echo 'DNF unavailable'; "
     "command -v flatpak >/dev/null && echo 'Flatpak available' || echo 'Flatpak unavailable'; "
     "command -v fwupdmgr >/dev/null && echo 'fwupd available' || echo 'fwupd unavailable'", NULL });
