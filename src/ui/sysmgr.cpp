@@ -14,6 +14,9 @@
 #include <stdarg.h>
 #include <initializer_list>
 #include <vector>
+#include <stdlib.h>
+#include <sys/statvfs.h>
+#include <glib/gstdio.h>
 
 static GtkWidget *sm_health, *sm_storage, *sm_startup, *sm_proc, *sm_cleanup, *sm_updates;
 static GtkWidget *sm_overall, *sm_cpu, *sm_ram;
@@ -300,6 +303,383 @@ quick_action_cb (GtkButton *b, gpointer p)
   acc_ui_nav_to ((const gchar *) p);
 }
 
+/* ------------------------------------------------ Storage Manager ------ */
+/* Windows-Storage-Sense-style breakdown of what is using disk space, with
+ * safe, user-scope cleanup. Every clean is confirmed first and limited to a
+ * fixed allow-list of per-user cache/trash directories — never system paths,
+ * never a path from untrusted input, never your documents or Downloads. */
+
+#define ST(en, ar) (acc_i18n_lang () == ACC_LANG_AR ? (ar) : (en))
+
+enum { STC_CACHE = 0, STC_THUMBS, STC_TRASH, STC_FLATPAK, STC_DOWNLOADS, STC_COUNT };
+
+static GtkWidget *st_bar, *st_bar_lbl, *st_val[STC_COUNT], *st_btn[STC_COUNT], *st_status;
+static guint      st_gen;
+static gboolean   st_busy;
+
+/* Absolute path for a cleanable category, newly allocated, or NULL. */
+static gchar *
+st_path (int cat)
+{
+  const gchar *home = g_get_home_dir ();
+  switch (cat)
+    {
+    case STC_CACHE:     return g_build_filename (home, ".cache", NULL);
+    case STC_THUMBS:    return g_build_filename (home, ".cache", "thumbnails", NULL);
+    case STC_TRASH:     return g_build_filename (home, ".local", "share", "Trash", NULL);
+    case STC_DOWNLOADS: return g_strdup (g_get_user_special_dir (G_USER_DIRECTORY_DOWNLOAD)
+                                         ?: g_build_filename (home, "Downloads", NULL));
+    default:            return NULL;
+    }
+}
+
+/* TRUE only for an absolute path strictly inside $HOME and at least one
+ * component deep — the guard before any deletion. */
+static gboolean
+st_path_safe (const gchar *p)
+{
+  const gchar *home = g_get_home_dir ();
+  if (!p || !home || !g_path_is_absolute (p)) return FALSE;
+  if (strstr (p, "..")) return FALSE;
+  gsize hl = strlen (home);
+  if (strncmp (p, home, hl) != 0 || p[hl] != G_DIR_SEPARATOR) return FALSE;
+  return strlen (p) > hl + 1;
+}
+
+/* Recursively delete `path` (file, dir, or symlink). Symlinks are unlinked,
+ * never followed. Bounded to paths under $HOME by st_path_safe at entry. */
+static void
+st_rm (const gchar *path)
+{
+  if (g_file_test (path, G_FILE_TEST_IS_DIR) &&
+      !g_file_test (path, G_FILE_TEST_IS_SYMLINK))
+    {
+      GDir *d = g_dir_open (path, 0, NULL);
+      if (d)
+        {
+          const gchar *n;
+          while ((n = g_dir_read_name (d)))
+            {
+              gchar *c = g_build_filename (path, n, NULL);
+              st_rm (c);
+              g_free (c);
+            }
+          g_dir_close (d);
+        }
+      g_rmdir (path);
+    }
+  else
+    g_unlink (path);
+}
+
+/* Empty the contents of `dir` but keep `dir` itself. */
+static void
+st_empty (const gchar *dir)
+{
+  if (!st_path_safe (dir) || !g_file_test (dir, G_FILE_TEST_IS_DIR))
+    return;
+  GDir *d = g_dir_open (dir, 0, NULL);
+  if (!d) return;
+  const gchar *n;
+  while ((n = g_dir_read_name (d)))
+    {
+      gchar *c = g_build_filename (dir, n, NULL);
+      st_rm (c);
+      g_free (c);
+    }
+  g_dir_close (d);
+}
+
+static void st_scan (void);
+
+typedef struct { guint gen; gint64 sizes[STC_COUNT]; gdouble disk_total, disk_free; } StMsg;
+
+static gchar *
+st_human (gint64 b)
+{
+  if (b < 0) return g_strdup ("—");
+  return g_format_size ((guint64) b);
+}
+
+static gboolean
+st_apply (gpointer data)
+{
+  StMsg *m = (StMsg *) data;
+  if (m->gen == st_gen)
+    {
+      for (int i = 0; i < STC_COUNT; i++)
+        if (st_val[i])
+          {
+            gchar *h;
+            if (i == STC_FLATPAK)
+              h = m->sizes[i] > 0
+                  ? g_strdup_printf (ST ("%ld unused", "%ld غير مستخدم"), (long) m->sizes[i])
+                  : g_strdup (ST ("None", "لا شيء"));
+            else
+              h = st_human (m->sizes[i]);
+            gtk_label_set_text (GTK_LABEL (st_val[i]), h);
+            g_free (h);
+            if (st_btn[i])
+              gtk_widget_set_sensitive (st_btn[i], m->sizes[i] > 0);
+          }
+      if (st_bar && m->disk_total > 0)
+        {
+          gdouble used = (m->disk_total - m->disk_free) / m->disk_total;
+          gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (st_bar), used);
+          if (st_bar_lbl)
+            {
+              gchar *s = g_strdup_printf (
+                ST ("%.0f GB free of %.0f GB", "%.0f جيجابايت متاحة من %.0f"),
+                m->disk_free, m->disk_total);
+              gtk_label_set_text (GTK_LABEL (st_bar_lbl), s);
+              g_free (s);
+            }
+        }
+      if (st_status) gtk_label_set_text (GTK_LABEL (st_status), "");
+      st_busy = FALSE;
+    }
+  g_free (m);
+  return G_SOURCE_REMOVE;
+}
+
+static gint64
+st_du (const gchar *dir)
+{
+  if (!dir || !g_file_test (dir, G_FILE_TEST_EXISTS)) return 0;
+  gchar *o = run_cmd ({ "du", "-sb", "--", dir, NULL });
+  gint64 v = o ? g_ascii_strtoll (o, NULL, 10) : -1;
+  g_free (o);
+  return v;
+}
+
+static gpointer
+st_worker (gpointer data)
+{
+  guint gen = GPOINTER_TO_UINT (data);
+  StMsg *m = g_new0 (StMsg, 1);
+  m->gen = gen;
+  for (int i = 0; i < STC_COUNT; i++)
+    {
+      gchar *p = st_path (i);
+      /* cache figure excludes thumbnails so the two rows don't double-count */
+      if (i == STC_CACHE)
+        {
+          gint64 all = st_du (p);
+          gchar *th = st_path (STC_THUMBS);
+          gint64 t = st_du (th);
+          m->sizes[i] = (all < 0) ? -1 : (all - (t > 0 ? t : 0));
+          g_free (th);
+        }
+      else if (i == STC_FLATPAK)
+        {
+          gchar *o = run_cmd ({ "sh", "-c",
+            "flatpak list --runtime --columns=application 2>/dev/null >/dev/null; "
+            "flatpak uninstall --unused --dry-run 2>/dev/null | grep -cE '^[[:space:]]*[0-9]+\\.' ", NULL });
+          m->sizes[i] = o ? atoll (o) : 0;   /* count of unused runtimes, not bytes */
+          g_free (o);
+        }
+      else
+        m->sizes[i] = st_du (p);
+      g_free (p);
+    }
+  struct statvfs sv;
+  if (statvfs (g_get_home_dir (), &sv) == 0 && sv.f_blocks)
+    {
+      m->disk_total = (gdouble) sv.f_blocks * sv.f_frsize / 1e9;
+      m->disk_free  = (gdouble) sv.f_bavail * sv.f_frsize / 1e9;
+    }
+  g_idle_add (st_apply, m);
+  return NULL;
+}
+
+static void
+st_scan (void)
+{
+  if (st_busy) return;
+  st_busy = TRUE;
+  st_gen++;
+  if (st_status) gtk_label_set_text (GTK_LABEL (st_status), ST ("Measuring…", "جارٍ القياس…"));
+  g_thread_unref (g_thread_new ("storage-mgr", st_worker, GUINT_TO_POINTER (st_gen)));
+}
+
+/* ---- cleaning (worker; confirmed before it is ever called) ---- */
+
+static gpointer
+st_clean_worker (gpointer data)
+{
+  int cat = GPOINTER_TO_INT (data);
+  if (cat == STC_FLATPAK)
+    {
+      gchar *o = run_cmd ({ "flatpak", "uninstall", "--unused", "-y", NULL });
+      g_free (o);
+    }
+  else if (cat == STC_TRASH)
+    {
+      gchar *files = g_build_filename (g_get_home_dir (), ".local", "share", "Trash", "files", NULL);
+      gchar *info  = g_build_filename (g_get_home_dir (), ".local", "share", "Trash", "info", NULL);
+      st_empty (files); st_empty (info);
+      g_free (files); g_free (info);
+    }
+  else
+    {
+      gchar *p = st_path (cat);
+      st_empty (p);
+      g_free (p);
+    }
+  g_idle_add ((GSourceFunc) +[] (gpointer) -> gboolean {
+      acc_ui_toast (ST ("Cleanup finished.", "انتهى التنظيف."));
+      st_scan ();
+      return G_SOURCE_REMOVE;
+    }, NULL);
+  return NULL;
+}
+
+static void
+st_clean_resp (AdwAlertDialog *d, const gchar *resp, gpointer data)
+{
+  (void) d;
+  if (g_strcmp0 (resp, "ok") == 0)
+    {
+      if (st_status) gtk_label_set_text (GTK_LABEL (st_status), ST ("Cleaning…", "جارٍ التنظيف…"));
+      g_thread_unref (g_thread_new ("storage-clean", st_clean_worker, data));
+    }
+}
+
+static void
+st_clean_cb (GtkButton *b, gpointer data)
+{
+  (void) b;
+  int cat = GPOINTER_TO_INT (data);
+  const gchar *body =
+    cat == STC_TRASH    ? ST ("Permanently delete everything in the Trash? This cannot be undone.",
+                              "حذف كل ما في سلة المهملات نهائيًا؟ لا يمكن التراجع.") :
+    cat == STC_FLATPAK  ? ST ("Remove Flatpak runtimes no app is using? They reinstall automatically when needed.",
+                              "إزالة أطقم تشغيل Flatpak غير المستخدمة؟ تُعاد تلقائيًا عند الحاجة.") :
+    cat == STC_THUMBS   ? ST ("Clear the thumbnail cache? Thumbnails will be regenerated as needed.",
+                              "مسح ذاكرة الصور المصغّرة؟ ستُنشأ من جديد عند الحاجة.") :
+                          ST ("Clear the application cache? Apps rebuild it as needed; some may start slower once.",
+                              "مسح ذاكرة التطبيقات المؤقتة؟ تُعاد عند الحاجة وقد يبطؤ بدء بعضها مرة واحدة.");
+  AdwDialog *d = ADW_DIALOG (adw_alert_dialog_new (ST ("Confirm cleanup", "تأكيد التنظيف"), body));
+  adw_alert_dialog_add_responses (ADW_ALERT_DIALOG (d),
+    "cancel", ST ("Cancel", "إلغاء"), "ok", ST ("Clean", "تنظيف"), NULL);
+  adw_alert_dialog_set_response_appearance (ADW_ALERT_DIALOG (d), "ok",
+    cat == STC_TRASH ? ADW_RESPONSE_DESTRUCTIVE : ADW_RESPONSE_SUGGESTED);
+  adw_alert_dialog_set_default_response (ADW_ALERT_DIALOG (d), "cancel");
+  adw_alert_dialog_set_close_response (ADW_ALERT_DIALOG (d), "cancel");
+  g_signal_connect (d, "response", G_CALLBACK (st_clean_resp), data);
+  adw_dialog_present (d, acc_ui_root ());
+}
+
+static void
+st_open_downloads_cb (GtkButton *b, gpointer d)
+{
+  (void) b; (void) d;
+  gchar *p = st_path (STC_DOWNLOADS);
+  gchar *uri = g_strdup_printf ("file://%s", p);
+  const gchar *argv[] = { "xdg-open", uri, NULL };
+  GSubprocess *pr = g_subprocess_newv (argv,
+      (GSubprocessFlags) (G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_SILENCE), NULL);
+  if (pr) g_object_unref (pr);
+  g_free (uri); g_free (p);
+}
+
+static void
+st_refresh_cb (GtkButton *b, gpointer d) { (void) b; (void) d; st_scan (); }
+
+static GtkWidget *
+st_row (int cat, const gchar *title, const gchar *desc)
+{
+  GtkWidget *row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
+  GtkWidget *col = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
+  gtk_widget_set_hexpand (col, TRUE);
+  gtk_box_append (GTK_BOX (col), mc_label (title, "val", 0));
+  GtkWidget *dl = mc_label (desc, "dim", 0);
+  gtk_label_set_wrap (GTK_LABEL (dl), TRUE);
+  gtk_box_append (GTK_BOX (col), dl);
+  gtk_box_append (GTK_BOX (row), col);
+
+  st_val[cat] = mc_label ("…", "val", 1);
+  gtk_widget_set_valign (st_val[cat], GTK_ALIGN_CENTER);
+  gtk_box_append (GTK_BOX (row), st_val[cat]);
+
+  if (cat == STC_DOWNLOADS)
+    {
+      GtkWidget *o = gtk_button_new_with_label (ST ("Open", "فتح"));
+      gtk_widget_add_css_class (o, "actionbtn");
+      gtk_widget_set_valign (o, GTK_ALIGN_CENTER);
+      g_signal_connect (o, "clicked", G_CALLBACK (st_open_downloads_cb), NULL);
+      gtk_box_append (GTK_BOX (row), o);
+      st_btn[cat] = NULL;
+    }
+  else
+    {
+      st_btn[cat] = gtk_button_new_with_label (
+        cat == STC_TRASH ? ST ("Empty", "إفراغ") : ST ("Clean", "تنظيف"));
+      gtk_widget_add_css_class (st_btn[cat], "actionbtn");
+      gtk_widget_set_valign (st_btn[cat], GTK_ALIGN_CENTER);
+      g_signal_connect (st_btn[cat], "clicked", G_CALLBACK (st_clean_cb), GINT_TO_POINTER (cat));
+      gtk_box_append (GTK_BOX (row), st_btn[cat]);
+    }
+  return row;
+}
+
+static GtkWidget *
+st_section (void)
+{
+  GtkWidget *panel = mc_panel (ST ("Storage Manager", "مدير التخزين"));
+  GtkWidget *sub = mc_label (
+    ST ("See what is using space and free some safely. Cleanup only touches your own cache and Trash — never system files, documents or Downloads — and every action is confirmed first.",
+        "شاهد ما يستهلك المساحة وحرّر بعضها بأمان. التنظيف يمسّ ذاكرتك المؤقتة وسلة المهملات فقط — دون ملفات النظام أو مستنداتك أو التنزيلات — ويُطلب تأكيد كل إجراء."),
+    "pagesub", 0);
+  gtk_label_set_wrap (GTK_LABEL (sub), TRUE);
+  gtk_box_append (GTK_BOX (panel), sub);
+
+  st_bar = gtk_progress_bar_new ();
+  gtk_box_append (GTK_BOX (panel), st_bar);
+  st_bar_lbl = mc_label ("…", "dim", 0);
+  gtk_box_append (GTK_BOX (panel), st_bar_lbl);
+
+  GtkWidget *bar = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *rb = gtk_button_new_with_label (ST ("Refresh", "تحديث"));
+  gtk_widget_add_css_class (rb, "actionbtn");
+  g_signal_connect (rb, "clicked", G_CALLBACK (st_refresh_cb), NULL);
+  gtk_box_append (GTK_BOX (bar), rb);
+  st_status = mc_label ("", "dim", 0);
+  gtk_widget_set_valign (st_status, GTK_ALIGN_CENTER);
+  gtk_box_append (GTK_BOX (bar), st_status);
+  gtk_box_append (GTK_BOX (panel), bar);
+
+  gtk_box_append (GTK_BOX (panel), st_row (STC_CACHE,
+    ST ("Application cache", "ذاكرة التطبيقات المؤقتة"),
+    ST ("Temporary files apps can rebuild.", "ملفات مؤقتة يمكن للتطبيقات إعادة بنائها.")));
+  gtk_box_append (GTK_BOX (panel), st_row (STC_THUMBS,
+    ST ("Thumbnails", "الصور المصغّرة"),
+    ST ("Cached previews of your images and videos.", "معاينات مخزّنة لصورك ومقاطعك.")));
+  gtk_box_append (GTK_BOX (panel), st_row (STC_TRASH,
+    ST ("Trash", "سلة المهملات"),
+    ST ("Files you deleted but have not emptied yet.", "ملفات حذفتها ولم تُفرغها بعد.")));
+  gtk_box_append (GTK_BOX (panel), st_row (STC_FLATPAK,
+    ST ("Unused Flatpak runtimes", "أطقم تشغيل Flatpak غير المستخدمة"),
+    ST ("Runtimes no installed app needs.", "أطقم لا يحتاجها أي تطبيق مثبّت.")));
+  gtk_box_append (GTK_BOX (panel), st_row (STC_DOWNLOADS,
+    ST ("Downloads folder", "مجلد التنزيلات"),
+    ST ("Shown for review only — never cleaned automatically.", "يُعرض للمراجعة فقط ولا يُنظَّف تلقائيًا.")));
+
+  st_scan ();
+  return panel;
+}
+
+static void
+st_teardown (void)
+{
+  st_gen++;
+  st_busy = FALSE;
+  st_bar = st_bar_lbl = st_status = NULL;
+  for (int i = 0; i < STC_COUNT; i++) st_val[i] = st_btn[i] = NULL;
+}
+
+#undef ST
+
 GtkWidget *
 acc_page_sysmgr (AccUI *u)
 {
@@ -450,6 +830,8 @@ acc_page_sysmgr (AccUI *u)
     gboolean warn = ld.disk_pct > 90.0 || ld.mem_pct > 90.0;
     set (sm_overall, warn ? "Needs Attention" : "Healthy");
   }
+  gtk_box_append (GTK_BOX (page), st_section ());
+
   run_updates ();
   g_thread_new ("storage-scan", storage_scan_thread, NULL);
   g_thread_new ("proc-scan", proc_scan_thread, NULL);
@@ -513,4 +895,5 @@ acc_sysmgr_teardown (void)
     }
   sm_health = sm_storage = sm_startup = sm_proc = sm_cleanup = sm_updates = NULL;
   sm_overall = sm_cpu = sm_ram = sm_reco = NULL;
+  st_teardown ();
 }

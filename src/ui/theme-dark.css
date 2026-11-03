@@ -650,3 +650,6 @@ scrollbar slider:hover { background: #4E6678; }
 .footbar .asusword { color: #22D3EE; font-style: normal; letter-spacing: 0.3px; }
 .footbar .slogan, .footbar .leaf { color: #6F8795; }
 .apptagline { color: #7F97A5; font-size: 9.5px; font-weight: 600; letter-spacing: 0.2px; }
+
+/* PC Health Check: warning status */
+.pill.bad { background: rgba(255, 99, 85, 0.16); color: #FF8A7A; }

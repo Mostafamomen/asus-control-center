@@ -27,6 +27,9 @@
 #include <gdk/gdk.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stdlib.h>
+#include <sys/statvfs.h>
+#include <sys/wait.h>
 
 /* ---------------------------------------------------------------- state */
 
@@ -868,6 +871,605 @@ copy_cb (GtkButton *b, gpointer u)
   acc_ui_toast (acc_tr (ACC_T_TT_COPY));
 }
 
+/* ---------------------------------------------- PC Health Check --------- */
+/* Read-only. All probing runs on a worker thread; results reach widgets via
+ * g_idle_add.  A generation counter drops results from a scan whose page was
+ * torn down or superseded. */
+
+#define T(en, ar) (acc_i18n_lang () == ACC_LANG_AR ? (ar) : (en))
+
+enum { HC_OK = 0, HC_ATTN, HC_WARN, HC_NA };
+
+enum {
+  HC_BAT = 0, HC_TEMP, HC_FANS,
+  HC_RAM, HC_STORAGE, HC_CPU,
+  HC_ASUSD, HC_NVIDIA, HC_GPU,
+  HC_UPDATES, HC_FWUPD, HC_FLATPAK,
+  HC_COUNT
+};
+
+typedef struct {
+  const gchar *icon;
+  const gchar *en, *ar;           /* check name                   */
+  const gchar *exp_en, *exp_ar;   /* expected / reference         */
+  const gchar *nav;               /* page for the action, or NULL */
+  const gchar *act_en, *act_ar;
+} HcDef;
+
+static const HcDef hc_defs[HC_COUNT] = {
+  { "battery-symbolic", "Battery health", "صحة البطارية",
+    "Full capacity at least 80% of design", "السعة الكاملة 80٪ على الأقل من التصميمية",
+    "hardware", "Battery settings", "إعدادات البطارية" },
+  { "weather-clear-symbolic", "CPU temperature", "حرارة المعالج",
+    "Below 80 °C", "أقل من 80 درجة",
+    "hardware", "Performance modes", "أوضاع الأداء" },
+  { "weather-windy-symbolic", "Fans", "المراوح",
+    "Fan sensors readable", "حساسات المراوح مقروءة",
+    "hardware", "Fan modes", "أوضاع المروحة" },
+  { "media-memory-symbolic", "Memory usage", "استهلاك الذاكرة",
+    "Below 85% in use", "أقل من 85٪ مستخدمة",
+    "sysmgr", "Open System Manager", "فتح مدير النظام" },
+  { "drive-harddisk-symbolic", "Storage space", "مساحة التخزين",
+    "At least 15% free on /", "15٪ متاحة على الأقل في /",
+    "sysmgr", "Storage Manager", "مدير التخزين" },
+  { "utilities-system-monitor-symbolic", "CPU load", "حمل المعالج",
+    "1-minute load below CPU count", "حمل الدقيقة أقل من عدد الأنوية",
+    "sysmgr", "Process Manager", "مدير العمليات" },
+  { "emblem-system-symbolic", "ASUS service (asusd)", "خدمة ASUS (asusd)",
+    "asusd active", "asusd نشطة",
+    "support", "Support", "الدعم" },
+  { "video-display-symbolic", "NVIDIA driver", "تعريف NVIDIA",
+    "Driver loaded when an NVIDIA GPU exists", "التعريف محمّل عند وجود بطاقة NVIDIA",
+    "softcenter", "Drivers", "التعريفات" },
+  { "video-joined-displays-symbolic", "GPU mode", "وضع بطاقة الرسوميات",
+    "Hybrid or Ultimate, no conflicting supergfxd", "Hybrid أو Ultimate دون تعارض مع supergfxd",
+    "hardware", "GPU settings", "إعدادات بطاقة الرسوميات" },
+  { "system-software-update-symbolic", "System updates", "تحديثات النظام",
+    "No pending package updates", "لا توجد تحديثات حزم معلّقة",
+    "softcenter", "Software Center", "مركز البرمجيات" },
+  { "application-x-firmware-symbolic", "Firmware updates", "تحديثات البرمجية الثابتة",
+    "No pending firmware updates (fwupd)", "لا توجد تحديثات برمجية ثابتة (fwupd)",
+    "softcenter", "Software Center", "مركز البرمجيات" },
+  { "system-software-install-symbolic", "Flatpak apps", "تطبيقات Flatpak",
+    "No pending Flatpak updates", "لا توجد تحديثات Flatpak معلّقة",
+    "softcenter", "Software Center", "مركز البرمجيات" },
+};
+
+static GtkWidget *hc_val[HC_COUNT], *hc_pill[HC_COUNT],
+                 *hc_expl[HC_COUNT], *hc_btn[HC_COUNT];
+static GtkWidget *hc_run_btn, *hc_bar, *hc_stamp, *hc_summary;
+static guint      hc_gen;
+static gboolean   hc_busy;
+static int        hc_status[HC_COUNT];
+
+typedef struct {
+  guint gen;
+  int   id;       /* -1: scan finished */
+  int   status;
+  gchar *val, *expl;
+} HcMsg;
+
+static void
+hc_set_pill (GtkWidget *pill, int st)
+{
+  static const gchar *tone[] = { "on", "soon", "bad", "off" };
+  if (!pill)
+    return;
+  const gchar *txt =
+    st == HC_OK   ? T ("Healthy", "سليم") :
+    st == HC_ATTN ? T ("Attention Required", "يحتاج انتباهًا") :
+    st == HC_WARN ? T ("Warning", "تحذير") :
+                    T ("Not Available", "غير متاح");
+  gtk_label_set_text (GTK_LABEL (pill), txt);
+  for (int i = 0; i < 4; i++)
+    gtk_widget_remove_css_class (pill, tone[i]);
+  gtk_widget_add_css_class (pill, tone[st]);
+}
+
+
+static gboolean
+hc_apply (gpointer data)
+{
+  HcMsg *m = (HcMsg *) data;
+  if (m->gen == hc_gen)
+    {
+      if (m->id >= 0)
+        {
+          hc_status[m->id] = m->status;
+          if (hc_val[m->id])
+            gtk_label_set_text (GTK_LABEL (hc_val[m->id]), m->val ? m->val : "");
+          if (hc_expl[m->id])
+            gtk_label_set_text (GTK_LABEL (hc_expl[m->id]), m->expl ? m->expl : "");
+          hc_set_pill (hc_pill[m->id], m->status);
+          if (hc_btn[m->id])
+            gtk_widget_set_visible (hc_btn[m->id],
+              hc_defs[m->id].nav && (m->status == HC_ATTN || m->status == HC_WARN));
+          if (hc_bar)
+            gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (hc_bar),
+                                           (m->id + 1) / (gdouble) HC_COUNT);
+        }
+      else
+        {
+          hc_busy = FALSE;
+          if (hc_bar) gtk_widget_set_visible (hc_bar, FALSE);
+          if (hc_run_btn)
+            {
+              gtk_widget_set_sensitive (hc_run_btn, TRUE);
+              gtk_button_set_label (GTK_BUTTON (hc_run_btn),
+                                    T ("Run again", "إعادة الفحص"));
+            }
+          if (hc_stamp)
+            {
+              GDateTime *now = g_date_time_new_now_local ();
+              gchar *t = g_date_time_format (now, "%Y-%m-%d %H:%M");
+              gchar *s = g_strdup_printf ("%s %s", T ("Last scan:", "آخر فحص:"), t);
+              gtk_label_set_text (GTK_LABEL (hc_stamp), s);
+              g_free (s); g_free (t); g_date_time_unref (now);
+            }
+          if (hc_summary)
+            {
+              int n[4] = { 0, 0, 0, 0 };
+              for (int i = 0; i < HC_COUNT; i++) n[hc_status[i]]++;
+              gchar *s = g_strdup_printf (
+                T ("%d healthy, %d need attention, %d warnings, %d not available",
+                   "%d سليمة، %d تحتاج انتباهًا، %d تحذيرات، %d غير متاحة"),
+                n[0], n[1], n[2], n[3]);
+              gtk_label_set_text (GTK_LABEL (hc_summary), s);
+              g_free (s);
+            }
+        }
+    }
+  g_free (m->val); g_free (m->expl); g_free (m);
+  return G_SOURCE_REMOVE;
+}
+
+static void
+hc_post (guint gen, int id, int st, gchar *val, gchar *expl)
+{
+  HcMsg *m = g_new0 (HcMsg, 1);
+  m->gen = gen; m->id = id; m->status = st; m->val = val; m->expl = expl;
+  g_idle_add (hc_apply, m);
+}
+
+/* argv only, no shell; `timeout` bounds network-backed tools. */
+static gboolean
+hc_spawn (const gchar *const *argv, gchar **out, gint *exit_code)
+{
+  gint status = 0;
+  gchar *o = NULL;
+  gboolean ok = g_spawn_sync (NULL, (gchar **) argv, NULL,
+                              (GSpawnFlags) (G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL),
+                              NULL, NULL, &o, NULL, &status, NULL);
+  if (!ok) { g_free (o); return FALSE; }
+  if (exit_code)
+    *exit_code = WIFEXITED (status) ? WEXITSTATUS (status) : -1;
+  if (out) *out = o; else g_free (o);
+  return TRUE;
+}
+
+static int
+hc_count_lines (const gchar *s)
+{
+  int n = 0;
+  if (!s) return 0;
+  gchar **v = g_strsplit (s, "\n", -1);
+  for (gchar **p = v; *p; p++)
+    if (g_strstrip (*p)[0]) n++;
+  g_strfreev (v);
+  return n;
+}
+
+static gpointer
+hc_worker (gpointer data)
+{
+  guint gen = GPOINTER_TO_UINT (data);
+
+  /* ---- Hardware ---- */
+  {
+    BatInfo b; memset (&b, 0, sizeof b);
+    battery_read (&b);
+    if (!b.ok || b.wh_design <= 0 || b.wh_full <= 0)
+      hc_post (gen, HC_BAT, HC_NA, g_strdup (T ("No battery data", "لا توجد بيانات للبطارية")),
+               g_strdup (T ("No battery was found, or it does not report its design capacity.",
+                            "لم يُعثر على بطارية أو أنها لا تُبلغ عن سعتها التصميمية.")));
+    else
+      {
+        int pct = (int) (b.wh_full * 100.0 / b.wh_design + 0.5);
+        int st = pct >= 80 ? HC_OK : pct >= 60 ? HC_ATTN : HC_WARN;
+        gchar *v = b.cycle_count >= 0
+          ? g_strdup_printf (T ("%d%% of design, %d cycles", "%d٪ من التصميمية، %d دورة"), pct, b.cycle_count)
+          : g_strdup_printf (T ("%d%% of design", "%d٪ من التصميمية"), pct);
+        hc_post (gen, HC_BAT, st, v, g_strdup (
+          st == HC_OK ? T ("Battery capacity is in good condition.", "سعة البطارية بحالة جيدة.") :
+          st == HC_ATTN ? T ("The battery has worn noticeably. A charge limit slows further wear.",
+                            "البطارية فقدت جزءًا ملحوظًا من سعتها. حدّ الشحن يبطئ التآكل.") :
+                          T ("The battery has lost much of its capacity. Consider a replacement.",
+                             "فقدت البطارية الكثير من سعتها. فكّر في استبدالها.")));
+      }
+  }
+  HwInfo hw; memset (&hw, 0, sizeof hw);
+  hwmon_read (&hw);
+  {
+    if (hw.t_cpu <= 0)
+      hc_post (gen, HC_TEMP, HC_NA, g_strdup (T ("No sensor", "لا يوجد حساس")),
+               g_strdup (T ("The CPU temperature sensor could not be read.", "تعذّرت قراءة حساس حرارة المعالج.")));
+    else
+      {
+        int st = hw.t_cpu < 80 ? HC_OK : hw.t_cpu < 92 ? HC_ATTN : HC_WARN;
+        hc_post (gen, HC_TEMP, st, g_strdup_printf ("%.0f °C", hw.t_cpu), g_strdup (
+          st == HC_OK ? T ("Temperature is normal.", "الحرارة طبيعية.") :
+          st == HC_ATTN ? T ("Running hot. Check what is using the CPU, or pick a quieter mode.",
+                            "الحرارة مرتفعة. راجع ما يستهلك المعالج أو اختر وضعًا أهدأ.") :
+                          T ("Very hot. Keep vents clear and reduce load.",
+                             "الحرارة مرتفعة جدًا. أبقِ فتحات التهوية نظيفة وخفّف الحمل.")));
+      }
+  }
+  {
+    if (!hw.fans_ok || (hw.fan_cpu < 0 && hw.fan_gpu < 0))
+      hc_post (gen, HC_FANS, HC_NA, g_strdup (T ("No fan sensor", "لا يوجد حساس مراوح")),
+               g_strdup (T ("This laptop does not expose fan speeds to Linux.",
+                            "هذا الحاسوب لا يُظهر سرعة المراوح لنظام لينكس.")));
+    else
+      {
+        int st = (hw.fan_cpu == 0 && hw.t_cpu >= 85) ? HC_WARN : HC_OK;
+        gchar *v = g_strdup_printf ("CPU %d RPM · GPU %d RPM",
+                                    MAX (hw.fan_cpu, 0), MAX (hw.fan_gpu, 0));
+        hc_post (gen, HC_FANS, st, v, g_strdup (st == HC_OK
+          ? T ("Fans respond normally. 0 RPM at low temperature is expected.",
+               "المراوح تعمل طبيعيًا. صفر دورة عند الحرارة المنخفضة أمر متوقع.")
+          : T ("CPU fan reads 0 RPM while the CPU is very hot.",
+               "مروحة المعالج تقرأ صفرًا بينما المعالج ساخن جدًا.")));
+      }
+  }
+
+  /* ---- System ---- */
+  {
+    gchar *mi = NULL;
+    long total = 0, avail = -1;
+    if (g_file_get_contents ("/proc/meminfo", &mi, NULL, NULL))
+      {
+        const gchar *p;
+        if ((p = strstr (mi, "MemTotal:"))) total = strtol (p + 9, NULL, 10);
+        if ((p = strstr (mi, "MemAvailable:"))) avail = strtol (p + 13, NULL, 10);
+      }
+    g_free (mi);
+    if (total <= 0 || avail < 0)
+      hc_post (gen, HC_RAM, HC_NA, g_strdup ("—"),
+               g_strdup (T ("/proc/meminfo could not be read.", "تعذّرت قراءة ‎/proc/meminfo.")));
+    else
+      {
+        int used = (int) ((total - avail) * 100 / total);
+        int st = used < 85 ? HC_OK : used < 95 ? HC_ATTN : HC_WARN;
+        hc_post (gen, HC_RAM, st,
+                 g_strdup_printf (T ("%d%% of %.1f GB in use", "%d٪ من %.1f جيجابايت مستخدمة"),
+                                  used, total / 1048576.0),
+                 g_strdup (st == HC_OK ? T ("Plenty of memory is free.", "توجد ذاكرة متاحة كافية.")
+                                       : T ("Memory is almost full. Close heavy apps.",
+                                            "الذاكرة شبه ممتلئة. أغلق التطبيقات الثقيلة.")));
+      }
+  }
+  {
+    struct statvfs sv;
+    if (statvfs ("/", &sv) != 0 || sv.f_blocks == 0)
+      hc_post (gen, HC_STORAGE, HC_NA, g_strdup ("—"),
+               g_strdup (T ("Disk usage could not be read.", "تعذّرت قراءة استخدام القرص.")));
+    else
+      {
+        gdouble total = (gdouble) sv.f_blocks * sv.f_frsize / 1e9;
+        gdouble freeg = (gdouble) sv.f_bavail * sv.f_frsize / 1e9;
+        int fp = (int) (freeg * 100 / total);
+        int st = fp >= 15 ? HC_OK : fp >= 5 ? HC_ATTN : HC_WARN;
+        hc_post (gen, HC_STORAGE, st,
+                 g_strdup_printf (T ("%.0f GB free of %.0f GB (%d%%)", "%.0f جيجابايت متاحة من %.0f (%d٪)"),
+                                  freeg, total, fp),
+                 g_strdup (st == HC_OK ? T ("Enough free space.", "توجد مساحة كافية.")
+                                       : T ("Low disk space can break updates. Review large files.",
+                                            "قلة المساحة قد تُفشل التحديثات. راجع الملفات الكبيرة.")));
+      }
+  }
+  {
+    gchar *la = NULL;
+    gdouble l1 = -1;
+    if (g_file_get_contents ("/proc/loadavg", &la, NULL, NULL))
+      l1 = g_ascii_strtod (la, NULL);
+    g_free (la);
+    int n = (int) g_get_num_processors ();
+    if (l1 < 0)
+      hc_post (gen, HC_CPU, HC_NA, g_strdup ("—"),
+               g_strdup (T ("/proc/loadavg could not be read.", "تعذّرت قراءة ‎/proc/loadavg.")));
+    else
+      {
+        int st = l1 < n ? HC_OK : l1 < 2 * n ? HC_ATTN : HC_WARN;
+        hc_post (gen, HC_CPU, st,
+                 g_strdup_printf (T ("%.2f on %d threads", "%.2f على %d خيط"), l1, n),
+                 g_strdup (st == HC_OK ? T ("The CPU is not overloaded.", "المعالج غير مُثقل.")
+                                       : T ("More work is queued than the CPU can run. Check running processes.",
+                                            "العمل المنتظر أكبر من قدرة المعالج. راجع العمليات الجارية.")));
+      }
+  }
+
+  /* ---- Drivers & Graphics ---- */
+  {
+    gchar *o = NULL; gint ec = -1;
+    const gchar *argv[] = { "systemctl", "is-active", "asusd", NULL };
+    gboolean ran = hc_spawn (argv, &o, &ec);
+    if (!ran)
+      hc_post (gen, HC_ASUSD, HC_NA, g_strdup ("—"),
+               g_strdup (T ("systemctl is not available.", "systemctl غير متاح.")));
+    else
+      {
+        gchar *state = g_strstrip (g_strdup (o ? o : ""));
+        gboolean active = ec == 0;
+        gboolean failed = g_strcmp0 (state, "failed") == 0;
+        hc_post (gen, HC_ASUSD, active ? HC_OK : failed ? HC_WARN : HC_ATTN,
+                 g_strdup (state[0] ? state : "unknown"),
+                 g_strdup (active ? T ("Performance modes, charge limit and GPU switching are available.",
+                                       "أوضاع الأداء وحد الشحن وتبديل بطاقة الرسوميات متاحة.")
+                          : failed ? T ("asusd has failed. Some ASUSCraft controls will not work. Check: journalctl -u asusd",
+                                        "فشلت خدمة asusd. بعض عناصر التحكم لن تعمل. راجع: journalctl -u asusd")
+                                   : T ("asusd is not running. ASUSCraft falls back to direct sysfs where it can.",
+                                        "asusd لا تعمل. يستخدم ASUSCraft واجهة sysfs مباشرة حيث أمكن.")));
+        g_free (state);
+      }
+    g_free (o);
+  }
+  AccGfxState gs; memset (&gs, 0, sizeof gs);
+  acc_gfx_state (&gs);
+  {
+    gchar *ver = NULL;
+    gboolean loaded = g_file_get_contents ("/sys/module/nvidia/version", &ver, NULL, NULL);
+    if (!gs.dgpu_present)
+      hc_post (gen, HC_NVIDIA, HC_NA, g_strdup (T ("No NVIDIA GPU", "لا توجد بطاقة NVIDIA")),
+               g_strdup (T ("No NVIDIA graphics card was detected.", "لم تُكتشف بطاقة NVIDIA.")));
+    else if (loaded)
+      hc_post (gen, HC_NVIDIA, HC_OK, g_strdup_printf ("nvidia %s", g_strstrip (ver)),
+               g_strdup (T ("The proprietary NVIDIA driver is loaded.", "تعريف NVIDIA الرسمي محمّل.")));
+    else
+      {
+        gboolean nouveau = g_file_test ("/sys/module/nouveau", G_FILE_TEST_IS_DIR);
+        hc_post (gen, HC_NVIDIA, HC_WARN,
+                 g_strdup (nouveau ? "nouveau" : T ("Not loaded", "غير محمّل")),
+                 g_strdup (T ("An NVIDIA GPU exists but the NVIDIA driver is not loaded. Gaming and Ultimate mode need it.",
+                              "توجد بطاقة NVIDIA لكن تعريفها غير محمّل. الألعاب ووضع Ultimate تحتاجه.")));
+      }
+    g_free (ver);
+  }
+  {
+    gchar *mux = NULL;
+    gboolean have = g_file_get_contents ("/sys/devices/platform/asus-nb-wmi/gpu_mux_mode",
+                                         &mux, NULL, NULL);
+    if (!have)
+      hc_post (gen, HC_GPU, HC_NA, g_strdup (T ("No GPU MUX", "لا يوجد MUX")),
+               g_strdup (T ("This laptop's firmware does not expose a display MUX.",
+                            "البرمجية الثابتة لا توفّر MUX للشاشة.")));
+    else
+      {
+        int m = atoi (mux);
+        const gchar *name = m == 0 ? "Ultimate" : "Hybrid";
+        int st = (gs.supergfxd_running || gs.supergfx_leftover) ? HC_ATTN : HC_OK;
+        hc_post (gen, HC_GPU, st, g_strdup (name), g_strdup (
+          gs.supergfxd_running ? T ("supergfxd is running and may conflict with MUX switching.",
+                                    "supergfxd تعمل وقد تتعارض مع تبديل MUX.") :
+          gs.supergfx_leftover ? T ("A leftover supergfxd blacklist still blocks the NVIDIA driver.",
+                                    "ملف حظر متبقٍ من supergfxd ما زال يحظر تعريف NVIDIA.") :
+          m == 0 ? T ("The internal panel is driven by NVIDIA. Battery life is shorter.",
+                      "اللوحة الداخلية على NVIDIA. مدة البطارية أقصر.")
+                 : T ("NVIDIA sleeps when idle. Best for battery.", "بطاقة NVIDIA تنام عند الخمول. الأفضل للبطارية.")));
+      }
+    g_free (mux);
+  }
+
+  /* ---- Application health ---- */
+  {
+    gchar *o = NULL; gint ec = -1;
+    const gchar *argv[] = { "timeout", "30", "dnf", "check-update", "-q", "--cacheonly", NULL };
+    gboolean has_dnf = g_find_program_in_path ("dnf") != NULL;
+    if (!has_dnf || !hc_spawn (argv, &o, &ec) || (ec != 0 && ec != 100))
+      hc_post (gen, HC_UPDATES, HC_NA, g_strdup ("—"),
+               g_strdup (T ("Package update data is not available (dnf missing or no cached metadata).",
+                            "بيانات التحديثات غير متاحة (dnf غير موجود أو لا توجد بيانات مخزّنة).")));
+    else
+      {
+        int n = ec == 100 ? hc_count_lines (o) : 0;
+        hc_post (gen, HC_UPDATES, n ? HC_ATTN : HC_OK,
+                 g_strdup_printf (T ("%d pending", "%d معلّق"), n),
+                 g_strdup (n ? T ("Updates bring security and driver fixes. Based on cached metadata.",
+                                  "التحديثات تجلب إصلاحات أمنية وتعريفات. بحسب البيانات المخزّنة.")
+                             : T ("The system is up to date (cached metadata).", "النظام محدّث (بحسب البيانات المخزّنة).")));
+      }
+    g_free (o);
+  }
+  {
+    gchar *o = NULL; gint ec = -1;
+    const gchar *argv[] = { "timeout", "30", "fwupdmgr", "get-updates", "--no-unreported-check",
+                            "--no-metadata-check", "--json", NULL };
+    gchar *fp = g_find_program_in_path ("fwupdmgr");
+    if (!fp || !hc_spawn (argv, &o, &ec))
+      hc_post (gen, HC_FWUPD, HC_NA, g_strdup ("—"),
+               g_strdup (T ("fwupd is not installed.", "fwupd غير مثبّت.")));
+    else
+      {
+        int n = 0;
+        for (const gchar *p = o; p && (p = strstr (p, "\"Releases\"")); p++) n++;
+        if (ec == 124 || (!o || !*o))
+          hc_post (gen, HC_FWUPD, HC_NA, g_strdup ("—"),
+                   g_strdup (T ("fwupd did not answer.", "لم تستجب fwupd.")));
+        else
+          hc_post (gen, HC_FWUPD, n ? HC_ATTN : HC_OK,
+                   g_strdup_printf (T ("%d device(s) with updates", "%d جهاز به تحديثات"), n),
+                   g_strdup (n ? T ("Firmware updates are available from the LVFS.", "تتوفر تحديثات للبرمجية الثابتة من LVFS.")
+                               : T ("No firmware updates reported.", "لا توجد تحديثات للبرمجية الثابتة.")));
+      }
+    g_free (fp); g_free (o);
+  }
+  {
+    gchar *o = NULL; gint ec = -1;
+    const gchar *argv[] = { "timeout", "30", "flatpak", "remote-ls", "--updates", "--columns=application", NULL };
+    gchar *fp = g_find_program_in_path ("flatpak");
+    if (!fp || !hc_spawn (argv, &o, &ec) || ec != 0)
+      hc_post (gen, HC_FLATPAK, HC_NA, g_strdup ("—"),
+               g_strdup (fp ? T ("Flatpak could not reach its remotes.", "تعذّر على Flatpak الوصول إلى مصادره.")
+                            : T ("Flatpak is not installed.", "Flatpak غير مثبّت.")));
+    else
+      {
+        int n = hc_count_lines (o);
+        hc_post (gen, HC_FLATPAK, n ? HC_ATTN : HC_OK,
+                 g_strdup_printf (T ("%d pending", "%d معلّق"), n),
+                 g_strdup (n ? T ("Some Flatpak apps have updates.", "بعض تطبيقات Flatpak لها تحديثات.")
+                             : T ("All Flatpak apps are up to date.", "كل تطبيقات Flatpak محدّثة.")));
+      }
+    g_free (fp); g_free (o);
+  }
+
+  hc_post (gen, -1, 0, NULL, NULL);
+  return NULL;
+}
+
+static void
+hc_run (void)
+{
+  if (hc_busy)
+    return;
+  hc_busy = TRUE;
+  hc_gen++;
+  for (int i = 0; i < HC_COUNT; i++)
+    {
+      hc_status[i] = HC_NA;
+      if (hc_val[i]) gtk_label_set_text (GTK_LABEL (hc_val[i]), T ("Checking…", "جارٍ الفحص…"));
+      if (hc_btn[i]) gtk_widget_set_visible (hc_btn[i], FALSE);
+    }
+  if (hc_run_btn)
+    {
+      gtk_widget_set_sensitive (hc_run_btn, FALSE);
+      gtk_button_set_label (GTK_BUTTON (hc_run_btn), T ("Scanning…", "جارٍ الفحص…"));
+    }
+  if (hc_bar)
+    {
+      gtk_progress_bar_set_fraction (GTK_PROGRESS_BAR (hc_bar), 0);
+      gtk_widget_set_visible (hc_bar, TRUE);
+    }
+  if (hc_summary) gtk_label_set_text (GTK_LABEL (hc_summary), "");
+  g_thread_unref (g_thread_new ("pc-health", hc_worker, GUINT_TO_POINTER (hc_gen)));
+}
+
+static void
+hc_run_cb (GtkButton *b, gpointer d)
+{
+  (void) b; (void) d;
+  hc_run ();
+}
+
+static void
+hc_nav_cb (GtkButton *b, gpointer d)
+{
+  (void) b;
+  acc_ui_nav_to ((const gchar *) d);
+}
+
+static GtkWidget *
+hc_card (int id)
+{
+  const HcDef *d = &hc_defs[id];
+  GtkWidget *c = mc_card ();
+  gtk_widget_set_size_request (c, 280, -1);
+  GtkWidget *top = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+  gtk_box_append (GTK_BOX (top), gtk_image_new_from_icon_name (d->icon));
+  GtkWidget *name = mc_title (T (d->en, d->ar));
+  gtk_widget_set_hexpand (name, TRUE);
+  gtk_box_append (GTK_BOX (top), name);
+  hc_pill[id] = mc_pill (T ("Not Available", "غير متاح"));
+  gtk_widget_add_css_class (hc_pill[id], "off");
+  gtk_widget_set_valign (hc_pill[id], GTK_ALIGN_CENTER);
+  gtk_box_append (GTK_BOX (top), hc_pill[id]);
+  gtk_box_append (GTK_BOX (c), top);
+
+  hc_val[id] = mc_label (T ("Not scanned yet", "لم يُفحص بعد"), "val", 0);
+  gtk_label_set_wrap (GTK_LABEL (hc_val[id]), TRUE);
+  gtk_box_append (GTK_BOX (c), hc_val[id]);
+
+  gchar *exp = g_strdup_printf ("%s %s", T ("Expected:", "المتوقع:"), T (d->exp_en, d->exp_ar));
+  GtkWidget *e = mc_label (exp, "dim", 0);
+  g_free (exp);
+  gtk_label_set_wrap (GTK_LABEL (e), TRUE);
+  gtk_box_append (GTK_BOX (c), e);
+
+  hc_expl[id] = mc_label ("", "dim", 0);
+  gtk_label_set_wrap (GTK_LABEL (hc_expl[id]), TRUE);
+  gtk_box_append (GTK_BOX (c), hc_expl[id]);
+
+  if (d->nav)
+    {
+      hc_btn[id] = gtk_button_new_with_label (T (d->act_en, d->act_ar));
+      gtk_widget_add_css_class (hc_btn[id], "actionbtn");
+      gtk_widget_set_halign (hc_btn[id], GTK_ALIGN_START);
+      gtk_widget_set_visible (hc_btn[id], FALSE);
+      g_signal_connect (hc_btn[id], "clicked", G_CALLBACK (hc_nav_cb), (gpointer) d->nav);
+      gtk_box_append (GTK_BOX (c), hc_btn[id]);
+    }
+  return c;
+}
+
+static GtkWidget *
+hc_section (void)
+{
+  GtkWidget *panel = mc_panel (T ("PC Health Check", "فحص صحة الحاسوب"));
+  GtkWidget *sub = mc_label (T ("Check your laptop's health and identify issues that may affect reliability and performance.",
+                                "افحص صحة حاسوبك واكتشف المشاكل التي قد تؤثر على الاعتمادية والأداء."),
+                             "pagesub", 0);
+  gtk_label_set_wrap (GTK_LABEL (sub), TRUE);
+  gtk_box_append (GTK_BOX (panel), sub);
+
+  GtkWidget *bar = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
+  hc_run_btn = gtk_button_new_with_label (T ("Run Health Check", "تشغيل فحص الصحة"));
+  gtk_widget_add_css_class (hc_run_btn, "primarybtn");
+  g_signal_connect (hc_run_btn, "clicked", G_CALLBACK (hc_run_cb), NULL);
+  gtk_box_append (GTK_BOX (bar), hc_run_btn);
+  hc_stamp = mc_label (T ("Not scanned yet", "لم يُفحص بعد"), "dim", 0);
+  gtk_widget_set_valign (hc_stamp, GTK_ALIGN_CENTER);
+  gtk_box_append (GTK_BOX (bar), hc_stamp);
+  gtk_box_append (GTK_BOX (panel), bar);
+
+  hc_bar = gtk_progress_bar_new ();
+  gtk_widget_set_visible (hc_bar, FALSE);
+  gtk_box_append (GTK_BOX (panel), hc_bar);
+  hc_summary = mc_label ("", "val", 0);
+  gtk_label_set_wrap (GTK_LABEL (hc_summary), TRUE);
+  gtk_box_append (GTK_BOX (panel), hc_summary);
+
+  static const struct { const gchar *en, *ar; int from, to; } cats[] = {
+    { "Hardware", "العتاد", HC_BAT, HC_FANS },
+    { "System", "النظام", HC_RAM, HC_CPU },
+    { "Drivers and Graphics", "التعريفات والرسوميات", HC_ASUSD, HC_GPU },
+    { "Application Health", "صحة التطبيقات", HC_UPDATES, HC_FLATPAK },
+  };
+  for (guint k = 0; k < G_N_ELEMENTS (cats); k++)
+    {
+      gtk_box_append (GTK_BOX (panel), mc_group (T (cats[k].en, cats[k].ar)));
+      GtkWidget *flow = gtk_flow_box_new ();
+      gtk_flow_box_set_selection_mode (GTK_FLOW_BOX (flow), GTK_SELECTION_NONE);
+      gtk_flow_box_set_homogeneous (GTK_FLOW_BOX (flow), TRUE);
+      gtk_flow_box_set_max_children_per_line (GTK_FLOW_BOX (flow), 3);
+      gtk_flow_box_set_column_spacing (GTK_FLOW_BOX (flow), 12);
+      gtk_flow_box_set_row_spacing (GTK_FLOW_BOX (flow), 12);
+      for (int i = cats[k].from; i <= cats[k].to; i++)
+        gtk_flow_box_append (GTK_FLOW_BOX (flow), hc_card (i));
+      gtk_box_append (GTK_BOX (panel), flow);
+    }
+  return panel;
+}
+
+static void
+hc_teardown (void)
+{
+  hc_gen++;          /* drop in-flight results */
+  hc_busy = FALSE;
+  for (int i = 0; i < HC_COUNT; i++)
+    hc_val[i] = hc_pill[i] = hc_expl[i] = hc_btn[i] = NULL;
+  hc_run_btn = hc_bar = hc_stamp = hc_summary = NULL;
+}
+
+#undef T
+
 /* ---------------------------------------- page builder ---------------- */
 
 GtkWidget *
@@ -903,6 +1505,9 @@ acc_sysdiag_page (AccUI *u)
       }
     gtk_box_append (GTK_BOX (page), h);
   }
+
+  /* ---- PC Health Check ---- */
+  gtk_box_append (GTK_BOX (page), hc_section ());
 
   /* global action bar */
   {
@@ -998,6 +1603,7 @@ acc_sysdiag_page (AccUI *u)
 void
 acc_sysdiag_teardown (void)
 {
+  hc_teardown ();
   sd_screen_val = sd_screen_pill = NULL;
   sd_kbd_val    = sd_kbd_pill    = NULL;
   sd_touch_val  = sd_touch_pill  = NULL;
