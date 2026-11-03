@@ -7,12 +7,15 @@
 #include "window.h"
 #include "../i18n/i18n.h"
 #include "../probe/load.h"
+#include "../probe/battery.h"
 #include <adwaita.h>
 #include <glib.h>
 #include <string.h>
 #include <stdarg.h>
 
 static GtkWidget *sm_health, *sm_storage, *sm_startup, *sm_proc, *sm_cleanup, *sm_updates;
+static GtkWidget *sm_overall, *sm_cpu, *sm_ram;
+static GtkWidget *sm_reco;
 static guint sm_proc_timer = 0;
 static gboolean sm_proc_busy = FALSE;
 
@@ -46,7 +49,7 @@ static gchar *
 build_startup_text (void)
 {
   GString *s = g_string_new (NULL);
-  const gchar *dirs[] = { NULL, NULL };
+  const gchar *dirs[] = { NULL, "/etc/xdg/autostart" };
   gchar *user_dir = g_build_filename (g_get_user_config_dir (), "autostart", NULL);
   dirs[0] = user_dir;
 
@@ -179,6 +182,75 @@ run_health (void)
     g_string_append (s, "\\nStorage warning: disk usage high");
   if (sm_health)
     set (sm_health, "%s", s->str);
+
+  /* Smart recommendations */
+  GString *r = g_string_new (NULL);
+  LoadInfo ld2;
+  acc_load_read (&ld2);
+  if (ld2.disk_pct > 90.0)
+    g_string_append (r, "Low storage: review Storage Manager.\n");
+  if (ld2.mem_pct > 90.0)
+    g_string_append (r, "High RAM usage: inspect Process Manager.\n");
+  gchar *failed_svc = run_cmd ((const gchar *[]) { "sh", "-c", "systemctl --failed --no-pager 2>/dev/null | grep -c failed", NULL });
+  if (failed_svc && atoi (failed_svc) > 0)
+    g_string_append (r, "Failed services detected: open System Diagnosis.\n");
+  g_free (failed_svc);
+  if (g_file_test ("/sys/class/power_supply/BAT0", G_FILE_TEST_IS_DIR))
+    {
+      BatInfo b; battery_read (&b);
+      gdouble health = (b.wh_full > 0 && b.wh_design > 0) ? b.wh_full / b.wh_design * 100.0 : -1;
+      if (health >= 0 && health < 80.0)
+        g_string_append (r, "Battery health low: review Battery Care.\n");
+    }
+  if (r->len == 0)
+    g_string_append (r, "No critical issues detected.\n");
+  if (sm_reco)
+    set (sm_reco, "%s", r->str);
+
+  /* Health history (local, append and cap to 50 entries) */
+  gchar *hist = g_build_filename (g_get_user_config_dir (), "asus-control-center", "health_history.txt", NULL);
+  gchar *hist_dir = g_path_get_dirname (hist);
+  g_mkdir_with_parents (hist_dir, 0700);
+  g_free (hist_dir);
+  GDateTime *now = g_date_time_new_now_local ();
+  gchar *ts = g_date_time_format (now, "%Y-%m-%d %H:%M");
+  g_date_time_unref (now);
+  GString *entry = g_string_new (NULL);
+  g_string_append_printf (entry, "%s | %s\n", ts, r->str);
+  g_free (ts);
+
+  gchar *old = NULL;
+  gsize old_len = 0;
+  if (g_file_get_contents (hist, &old, &old_len, NULL))
+    {
+      GString *combined = g_string_new (old);
+      g_string_append (combined, entry->str);
+      gchar **lines = g_strsplit (combined->str, "\n", -1);
+      gint n = 0;
+      while (lines[n]) n++;
+      if (n > 50)
+        {
+          GString *trimmed = g_string_new (NULL);
+          for (gint i = n - 50; i < n; i++)
+            if (lines[i] && *lines[i])
+              g_string_append_printf (trimmed, "%s\n", lines[i]);
+          g_file_set_contents_full (hist, trimmed->str, -1,
+                                    G_FILE_SET_CONTENTS_CONSISTENT, 0600, NULL);
+          g_string_free (trimmed, TRUE);
+        }
+      else
+        g_file_set_contents_full (hist, combined->str, -1,
+                                  G_FILE_SET_CONTENTS_CONSISTENT, 0600, NULL);
+      g_string_free (combined, TRUE);
+      g_strfreev (lines);
+      g_free (old);
+    }
+  else
+    g_file_set_contents_full (hist, entry->str, -1,
+                              G_FILE_SET_CONTENTS_CONSISTENT, 0600, NULL);
+  g_string_free (entry, TRUE);
+  g_free (hist);
+  g_string_free (r, TRUE);
   g_string_free (s, TRUE);
 }
 
@@ -202,8 +274,20 @@ static gboolean
 proc_timer_cb (gpointer data)
 {
   (void) data;
+  if (!sm_proc || !GTK_IS_WIDGET (sm_proc))
+    return G_SOURCE_REMOVE;
+  /* Pause background work while System Manager is not the visible page. */
+  if (!gtk_widget_get_visible (sm_proc))
+    return G_SOURCE_CONTINUE;
   proc_scan_thread (NULL);
   return G_SOURCE_CONTINUE;
+}
+
+static void
+quick_action_cb (GtkButton *b, gpointer p)
+{
+  (void) b;
+  acc_ui_nav_to ((const gchar *) p);
 }
 
 GtkWidget *
@@ -226,6 +310,36 @@ acc_page_sysmgr (AccUI *u)
     gtk_box_append (GTK_BOX (col), sub);
     gtk_box_append (GTK_BOX (h), col);
     gtk_box_append (GTK_BOX (page), h);
+  }
+
+  {
+    GtkWidget *c = mc_card ();
+    gtk_box_append (GTK_BOX (c), mc_title ("Overall System Health"));
+    sm_overall = mc_label ("Checking…", "val", 0);
+    gtk_label_set_wrap (GTK_LABEL (sm_overall), TRUE);
+    gtk_box_append (GTK_BOX (c), sm_overall);
+    gtk_box_append (GTK_BOX (page), c);
+  }
+
+  {
+    GtkWidget *c = mc_card ();
+    gtk_box_append (GTK_BOX (c), mc_title ("CPU & Memory"));
+    sm_cpu = mc_label ("—", "val", 0);
+    gtk_label_set_wrap (GTK_LABEL (sm_cpu), TRUE);
+    gtk_box_append (GTK_BOX (c), sm_cpu);
+    sm_ram = mc_label ("—", "val", 0);
+    gtk_label_set_wrap (GTK_LABEL (sm_ram), TRUE);
+    gtk_box_append (GTK_BOX (c), sm_ram);
+    gtk_box_append (GTK_BOX (page), c);
+  }
+
+  {
+    GtkWidget *c = mc_card ();
+    gtk_box_append (GTK_BOX (c), mc_title ("Smart Recommendations"));
+    sm_reco = mc_label ("Run Health Check to generate recommendations.", "val", 0);
+    gtk_label_set_wrap (GTK_LABEL (sm_reco), TRUE);
+    gtk_box_append (GTK_BOX (c), sm_reco);
+    gtk_box_append (GTK_BOX (page), c);
   }
 
   {
@@ -282,17 +396,101 @@ acc_page_sysmgr (AccUI *u)
     gtk_box_append (GTK_BOX (page), c);
   }
 
+  /* Quick Actions */
+  {
+    GtkWidget *c = mc_card ();
+    gtk_box_append (GTK_BOX (c), mc_title ("Quick Actions"));
+    struct { const char *label; const char *page; } acts[] = {
+      { "Open Storage Manager", "sysmgr" },
+      { "Open Process Manager", "sysmgr" },
+      { "Open Startup Manager", "sysmgr" },
+      { "Open Software Center", "softcenter" },
+      { "Open Updates Center", "support" },
+      { "Open Hardware Diagnostics", "diagnosis" },
+      { "Open Battery Care", "customization" },
+    };
+    for (int i = 0; i < 7; i++)
+      {
+        GtkWidget *b = gtk_button_new_with_label (acts[i].label);
+        gtk_widget_add_css_class (b, "actionbtn");
+        gtk_widget_set_halign (b, GTK_ALIGN_START);
+        g_signal_connect (b, "clicked", G_CALLBACK (quick_action_cb), (gpointer) acts[i].page);
+        gtk_box_append (GTK_BOX (c), b);
+      }
+    gtk_box_append (GTK_BOX (page), c);
+  }
+
   /* initial data */
   gchar *st = build_startup_text ();
   if (st) { set (sm_startup, "%s", st); g_free (st); }
 
   run_health ();
+  {
+    LoadInfo ld;
+    acc_load_read (&ld);
+    if (ld.cpu_pct >= 0)
+      set (sm_cpu, "CPU load: %.0f%%", ld.cpu_pct);
+    else
+      set (sm_cpu, "CPU load: unavailable");
+    if (ld.mem_pct >= 0)
+      set (sm_ram, "RAM: %.0f%% used · %.1f / %.1f GiB", ld.mem_pct, ld.mem_total_gb * ld.mem_pct / 100.0, ld.mem_total_gb);
+    else
+      set (sm_ram, "RAM: unavailable");
+    /* overall health heuristic */
+    gboolean warn = ld.disk_pct > 90.0 || ld.mem_pct > 90.0;
+    set (sm_overall, warn ? "Needs Attention" : "Healthy");
+  }
   run_updates ();
   g_thread_new ("storage-scan", storage_scan_thread, NULL);
   g_thread_new ("proc-scan", proc_scan_thread, NULL);
   sm_proc_timer = g_timeout_add_seconds (2, proc_timer_cb, NULL);
 
   return mc_page (page);
+}
+
+gboolean
+acc_sysmgr_selftest (void)
+{
+  gchar *dir = g_mkdtemp (g_strdup ("/tmp/asuscraft-sysmgr-XXXXXX"));
+  if (!dir)
+    return FALSE;
+  gchar *hist = g_build_filename (dir, "health_history.txt", NULL);
+  gboolean ok = TRUE;
+
+  /* empty history */
+  if (!g_file_set_contents (hist, "", -1, NULL))
+    ok = FALSE;
+  gchar *contents = NULL;
+  gsize len = 0;
+  if (!g_file_get_contents (hist, &contents, &len, NULL) || len != 0)
+    ok = FALSE;
+  g_free (contents);
+
+  /* append */
+  if (ok)
+    {
+      g_file_set_contents (hist, "entry1\n", -1, NULL);
+      gchar *old = NULL;
+      gsize old_len = 0;
+      if (g_file_get_contents (hist, &old, &old_len, NULL))
+        {
+          GString *c = g_string_new (old);
+          g_string_append (c, "entry2\n");
+          g_file_set_contents (hist, c->str, -1, NULL);
+          g_string_free (c, TRUE);
+          g_free (old);
+        }
+      if (!g_file_get_contents (hist, &contents, &len, NULL) ||
+          strstr (contents, "entry1") == NULL ||
+          strstr (contents, "entry2") == NULL)
+        ok = FALSE;
+      g_free (contents);
+    }
+
+  g_free (hist);
+  rmdir (dir);
+  g_free (dir);
+  return ok;
 }
 
 void
@@ -304,4 +502,5 @@ acc_sysmgr_teardown (void)
       sm_proc_timer = 0;
     }
   sm_health = sm_storage = sm_startup = sm_proc = sm_cleanup = sm_updates = NULL;
+  sm_overall = sm_cpu = sm_ram = sm_reco = NULL;
 }

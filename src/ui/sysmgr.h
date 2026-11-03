@@ -7,5 +7,6 @@
 G_BEGIN_DECLS
 GtkWidget *acc_page_sysmgr (AccUI *u);
 void       acc_sysmgr_teardown (void);
+gboolean   acc_sysmgr_selftest (void);
 G_END_DECLS
 #endif

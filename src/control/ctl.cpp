@@ -70,13 +70,14 @@ acc_ctl_run (const gchar *action, const gchar *arg, gchar **err)
 
   if (!p)
     {
+      s_last_exit = -1;
       if (err)
         *err = g_strdup (e ? e->message : "spawn failed");
       g_clear_error (&e);
       return FALSE;
     }
 
-  gboolean ok = g_subprocess_wait_check (p, NULL, &e) ;
+  gboolean ok = g_subprocess_wait_check (p, NULL, &e);
   /* remember how it ended: helper exit codes carry the reason
    * (3 = modules in use), pkexec returns 127 when auth is dismissed */
   s_last_exit = g_subprocess_get_exit_status (p) & 0xff;

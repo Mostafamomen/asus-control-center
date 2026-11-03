@@ -18,7 +18,7 @@
     <ul>
       <li>Battery charge limits and charging modes</li>
       <li>Quiet, Balanced and Performance profiles</li>
-      <li>GPU MUX switching and iGPU-only mode</li>
+      <li>GPU MUX switching (Hybrid and Ultimate modes)</li>
       <li>Keyboard backlight and touchpad controls</li>
       <li>Fan, temperature and GPU monitoring</li>
       <li>OLED-friendly display dimming and eye-care modes</li>
@@ -69,12 +69,37 @@
     <keyword>oled</keyword>
   </keywords>
   <releases>
+    <release version="1.0.0" date="2026-11-03">
+      <description>
+        <p>First stable release.</p>
+        <ul>
+          <li>System Manager: health overview, CPU/RAM monitoring, Smart Recommendations, Quick Actions, health history</li>
+          <li>Software Center: installed apps, pending updates, driver and diagnostics overview</li>
+          <li>Fix memory leak in health-history directory creation</li>
+          <li>Fix stale helper exit code on spawn failure</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.9.0" date="2026-11-02">
+      <description>
+        <p>System Manager and Software Center pages; expanded System Diagnosis.</p>
+      </description>
+    </release>
+    <release version="0.6.0" date="2026-11-02">
+      <description>
+        <p>GPU MUX double-write fix; post-reboot switch verification; honest Integrated status.</p>
+      </description>
+    </release>
+    <release version="0.5.0" date="2026-10-31">
+      <description>
+        <p>Colored app icon; RPM packaging fixes; security hardening of polkit helper.</p>
+      </description>
+    </release>
     <release version="0.4.0" date="2026-10-29">
       <description>
         <p>First packaged release, with RPM and Debian packages.</p>
         <ul>
           <li>Separate hardware backlight slider next to OLED dimming</li>
-          <li>iGPU-only mode via supergfxd</li>
           <li>OLED dimming via the bundled Soft Brightness Plus extension</li>
           <li>Layout, colours and fonts in the style of MyASUS</li>
         </ul>

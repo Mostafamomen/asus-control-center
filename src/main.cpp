@@ -8,6 +8,7 @@
 #include "i18n/i18n.h"
 #include "ui/window.h"
 #include "ui/home.h"
+#include "ui/sysmgr.h"
 #include "ui/login.h"
 #include "user/user.h"
 #include "control/backlight.h"
@@ -561,8 +562,8 @@ main (int argc, char **argv)
     {
       self_test ();
       acc_brightness_shutdown ();
-      /* non-zero so `make test` fails when the sign-in crypto is broken */
-      return acc_user_selftest () ? 0 : 1;
+      /* non-zero so `make test` fails when the sign-in crypto or System Manager self-test is broken */
+      return (acc_user_selftest () && acc_sysmgr_selftest ()) ? 0 : 1;
     }
 
   /* arabic is the default language of the project */

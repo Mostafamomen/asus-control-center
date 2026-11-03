@@ -24,3 +24,6 @@ asus-control-center
 /debian/*.debhelper.log
 /asus-control-center-*.tar.gz
 launcher
+
+# stale backup files
+*.backup
