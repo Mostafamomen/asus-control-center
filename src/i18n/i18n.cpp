@@ -177,6 +177,11 @@ static const gchar *EN[ACC_T_COUNT] = {
   "OLED dimming installed. Log out and back in, then use the slider.",
   "OLED dimming enabled. If the slider does nothing yet, log out and back in.",
   "Could not set up OLED dimming. See the terminal for details.",
+  /* System Manager */
+  "System Manager", "Read-only health, storage, startup, process and update overview.",
+  "Health Check", "Storage Manager", "Startup Manager", "Process Manager",
+  "System Cleanup", "Updates Center", "Loading…", "Unavailable",
+  "No failed services detected", "User cache size", "User", "System",
   /* ASUSCraft sections */
   "Customization", "Hardware", "System Diagnosis", "Updates & Support",
   "Tune performance, battery care, graphics and display.",
@@ -204,6 +209,8 @@ static const gchar *EN[ACC_T_COUNT] = {
   "Dead Pixel Check", "Press any key to see it light up. Press Esc or close the window when done.",
   "Launch the screen test to check for dead pixels.",
   "Screen test running — close the window when done.",
+  "No dead pixels noticed", "I noticed an issue",
+  "Next",
   "Keyboard Test", "Press keys to light them up. Close the window when done.",
   "Launch the keyboard test to check each key.",
   "Keyboard test running — close the window when done.",
@@ -384,6 +391,11 @@ static const gchar *AR[ACC_T_COUNT] = {
   "تم تثبيت تعتيم OLED. سجّل الخروج ثم الدخول، ثم استخدم شريط التمرير.",
   "تم تفعيل تعتيم OLED. إذا لم يعمل الشريط بعد، سجّل الخروج ثم الدخول.",
   "تعذّر إعداد تعتيم OLED. راجع الطرفية للتفاصيل.",
+  /* System Manager */
+  "مدير النظام", "نظرة عامة للقراءة فقط على الصحة والتخزين والتشغيل والعمليات والتحديثات.",
+  "فحص الصحة", "مدير التخزين", "مدير التشغيل", "مدير العمليات",
+  "تنظيف النظام", "مركز التحديثات", "جارٍ التحميل…", "غير متاح",
+  "لا توجد خدمات فاشلة", "حجم ذاكرة التخزين المؤقت", "مستخدم", "نظام",
   /* ASUSCraft sections */
   "التخصيص", "العتاد", "تشخيص النظام", "التحديثات والدعم",
   "اضبط الأداء والعناية بالبطارية والرسوميات والشاشة.",
@@ -411,6 +423,8 @@ static const gchar *AR[ACC_T_COUNT] = {
   "فحص البكسل الميت", "اضغط أي مفتاح لتراه يضيء. اضغط Esc أو أغلق النافذة عند الانتهاء.",
   "شغّل اختبار الشاشة للكشف عن البكسل الميت.",
   "اختبار الشاشة قيد التشغيل — أغلق النافذة عند الانتهاء.",
+  "لم ألاحظ بكسلات ميتة", "لاحظت مشكلة",
+  "التالي",
   "اختبار لوحة المفاتيح", "اضغط المفاتيح لتراها تضيء. أغلق النافذة عند الانتهاء.",
   "شغّل اختبار لوحة المفاتيح لفحص كل مفتاح.",
   "اختبار لوحة المفاتيح قيد التشغيل — أغلق النافذة عند الانتهاء.",

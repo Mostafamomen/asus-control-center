@@ -164,9 +164,42 @@ sd_group_box (AccStr title_key, GCallback run_group_cb,
 
 /* ---------------------------------------- screen test window ---------- */
 
-static const gchar *sd_screen_colors[] = { "white", "black", "red", "green", "blue", NULL };
+static const gchar *sd_screen_colors[] = {
+  "black", "white", "red", "green", "blue",
+  "gray", "yellow", "cyan", "magenta", NULL
+};
 static gint sd_screen_idx = 0;
 static GtkWidget *sd_screen_win = NULL;
+static GtkWidget *sd_screen_area = NULL;
+static GtkWidget *sd_screen_hint = NULL;
+
+static void
+sd_screen_apply_color (void)
+{
+  if (!sd_screen_area)
+    return;
+  gchar *css = g_strdup_printf ("drawingarea { background-color: %s; }",
+                                sd_screen_colors[sd_screen_idx]);
+  GtkCssProvider *prov = gtk_css_provider_new ();
+  gtk_css_provider_load_from_string (prov, css);
+  g_free (css);
+  gtk_style_context_add_provider_for_display (
+      gdk_display_get_default (),
+      GTK_STYLE_PROVIDER (prov),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  g_object_unref (prov);
+  gtk_widget_queue_draw (sd_screen_area);
+  if (sd_screen_hint)
+    {
+      gchar *t = g_strdup_printf ("%s  (%d/%d)  —  %s",
+                                  acc_tr (ACC_T_SCREEN_TEST_TITLE),
+                                  sd_screen_idx + 1,
+                                  9,
+                                  acc_tr (ACC_T_SCREEN_TEST_HINT));
+      gtk_label_set_text (GTK_LABEL (sd_screen_hint), t);
+      g_free (t);
+    }
+}
 
 static gboolean
 screen_key_press (GtkEventControllerKey *ctl,
@@ -174,35 +207,74 @@ screen_key_press (GtkEventControllerKey *ctl,
                   gpointer win)
 {
   (void) ctl; (void) keycode; (void) state;
-  if (!win) return FALSE;
+  if (!win)
+    return FALSE;
   if (keyval == GDK_KEY_Escape || keyval == GDK_KEY_q || keyval == GDK_KEY_Q)
     {
       gtk_window_close (GTK_WINDOW (win));
       return TRUE;
     }
-  /* advance to next colour on any other key / click */
-  sd_screen_idx++;
-  if (sd_screen_colors[sd_screen_idx] == NULL)
+  if (keyval == GDK_KEY_Right || keyval == GDK_KEY_space || keyval == GDK_KEY_Return)
     {
-      gtk_window_close (GTK_WINDOW (win));
+      if (sd_screen_colors[sd_screen_idx + 1])
+        {
+          sd_screen_idx++;
+          sd_screen_apply_color ();
+        }
       return TRUE;
     }
-  GtkWidget *da = gtk_widget_get_first_child (GTK_WIDGET (win));
-  if (da)
+  if (keyval == GDK_KEY_Left)
     {
-      gchar *css = g_strdup_printf ("drawingarea { background-color: %s; }",
-                                    sd_screen_colors[sd_screen_idx]);
-      GtkCssProvider *prov = gtk_css_provider_new ();
-      gtk_css_provider_load_from_string (prov, css);
-      g_free (css);
-      gtk_style_context_add_provider_for_display (
-          gdk_display_get_default (),
-          GTK_STYLE_PROVIDER (prov),
-          GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-      g_object_unref (prov);
-      gtk_widget_queue_draw (da);
+      if (sd_screen_idx > 0)
+        {
+          sd_screen_idx--;
+          sd_screen_apply_color ();
+        }
+      return TRUE;
     }
-  return TRUE;
+  return FALSE;
+}
+
+static void
+screen_prev_cb (GtkButton *b, gpointer unused)
+{
+  (void) b; (void) unused;
+  if (sd_screen_idx > 0)
+    {
+      sd_screen_idx--;
+      sd_screen_apply_color ();
+    }
+}
+
+static void
+screen_next_cb (GtkButton *b, gpointer unused)
+{
+  (void) b; (void) unused;
+  if (sd_screen_colors[sd_screen_idx + 1])
+    {
+      sd_screen_idx++;
+      sd_screen_apply_color ();
+    }
+}
+
+static void
+screen_pass_cb (GtkButton *b, gpointer unused)
+{
+  (void) b; (void) unused;
+  sd_set (sd_screen_val, "%s", acc_tr (ACC_T_SCREEN_TEST_PASS));
+  sd_pill (sd_screen_pill, "PASS", "on");
+  if (sd_screen_win)
+    gtk_window_close (GTK_WINDOW (sd_screen_win));
+}
+
+static void
+screen_fail_cb (GtkButton *b, gpointer unused)
+{
+  (void) b; (void) unused;
+  sd_set (sd_screen_val, "%s", acc_tr (ACC_T_SCREEN_TEST_FAIL));
+  sd_pill (sd_screen_pill, "WARN", "soon");
+  if (sd_screen_win)
+    gtk_window_close (GTK_WINDOW (sd_screen_win));
 }
 
 static void
@@ -210,6 +282,8 @@ screen_win_destroyed (GtkWidget *win, gpointer unused)
 {
   (void) win; (void) unused;
   sd_screen_win = NULL;
+  sd_screen_area = NULL;
+  sd_screen_hint = NULL;
 }
 
 static void
@@ -231,30 +305,51 @@ launch_screen_cb (GtkButton *b, gpointer unused)
   sd_screen_win = win;
   g_signal_connect (win, "destroy", G_CALLBACK (screen_win_destroyed), NULL);
 
-  GtkWidget *da = gtk_drawing_area_new ();
-  gtk_widget_set_hexpand (da, TRUE);
-  gtk_widget_set_vexpand (da, TRUE);
+  sd_screen_area = gtk_drawing_area_new ();
+  gtk_widget_set_hexpand (sd_screen_area, TRUE);
+  gtk_widget_set_vexpand (sd_screen_area, TRUE);
 
-  gchar *css = g_strdup_printf ("drawingarea { background-color: %s; }",
-                                sd_screen_colors[0]);
-  GtkCssProvider *prov = gtk_css_provider_new ();
-  gtk_css_provider_load_from_string (prov, css);
-  g_free (css);
-  gtk_style_context_add_provider_for_display (
-      gdk_display_get_default (),
-      GTK_STYLE_PROVIDER (prov),
-      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-  g_object_unref (prov);
-
-  /* instruction overlay */
   GtkWidget *overlay = gtk_overlay_new ();
-  gtk_overlay_set_child (GTK_OVERLAY (overlay), da);
-  GtkWidget *hint = gtk_label_new (acc_tr (ACC_T_SCREEN_TEST_HINT));
-  gtk_widget_add_css_class (hint, "pagesub");
-  gtk_widget_set_halign (hint, GTK_ALIGN_CENTER);
-  gtk_widget_set_valign (hint, GTK_ALIGN_END);
-  gtk_widget_set_margin_bottom (hint, 24);
-  gtk_overlay_add_overlay (GTK_OVERLAY (overlay), hint);
+  gtk_overlay_set_child (GTK_OVERLAY (overlay), sd_screen_area);
+
+  sd_screen_hint = gtk_label_new ("");
+  gtk_widget_add_css_class (sd_screen_hint, "pagesub");
+  gtk_widget_set_halign (sd_screen_hint, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (sd_screen_hint, GTK_ALIGN_START);
+  gtk_widget_set_margin_top (sd_screen_hint, 24);
+  gtk_overlay_add_overlay (GTK_OVERLAY (overlay), sd_screen_hint);
+
+  GtkWidget *ctrl = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
+  gtk_widget_set_halign (ctrl, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (ctrl, GTK_ALIGN_END);
+  gtk_widget_set_margin_bottom (ctrl, 24);
+
+  GtkWidget *prev = gtk_button_new_with_label (acc_tr (ACC_T_BACK));
+  gtk_widget_add_css_class (prev, "actionbtn");
+  g_signal_connect (prev, "clicked", G_CALLBACK (screen_prev_cb), NULL);
+  gtk_box_append (GTK_BOX (ctrl), prev);
+
+  GtkWidget *next = gtk_button_new_with_label (acc_tr (ACC_T_NEXT));
+  gtk_widget_add_css_class (next, "actionbtn");
+  g_signal_connect (next, "clicked", G_CALLBACK (screen_next_cb), NULL);
+  gtk_box_append (GTK_BOX (ctrl), next);
+
+  GtkWidget *pass = gtk_button_new_with_label (acc_tr (ACC_T_SCREEN_TEST_PASS));
+  gtk_widget_add_css_class (pass, "primarybtn");
+  g_signal_connect (pass, "clicked", G_CALLBACK (screen_pass_cb), NULL);
+  gtk_box_append (GTK_BOX (ctrl), pass);
+
+  GtkWidget *fail = gtk_button_new_with_label (acc_tr (ACC_T_SCREEN_TEST_FAIL));
+  gtk_widget_add_css_class (fail, "actionbtn");
+  g_signal_connect (fail, "clicked", G_CALLBACK (screen_fail_cb), NULL);
+  gtk_box_append (GTK_BOX (ctrl), fail);
+
+  GtkWidget *exitb = gtk_button_new_with_label (acc_tr (ACC_T_CANCEL));
+  gtk_widget_add_css_class (exitb, "actionbtn");
+  g_signal_connect (exitb, "clicked", G_CALLBACK (+[](GtkButton*,gpointer w){ gtk_window_close(GTK_WINDOW(w)); }), win);
+  gtk_box_append (GTK_BOX (ctrl), exitb);
+
+  gtk_overlay_add_overlay (GTK_OVERLAY (overlay), ctrl);
 
   gtk_window_set_child (GTK_WINDOW (win), overlay);
 
@@ -263,17 +358,8 @@ launch_screen_cb (GtkButton *b, gpointer unused)
                     G_CALLBACK (screen_key_press), win);
   gtk_widget_add_controller (win, key_ctl);
 
-  /* click anywhere to advance to next colour */
-  GtkGesture *tap = gtk_gesture_click_new ();
-  g_signal_connect (tap, "pressed",
-                    G_CALLBACK (+[](GtkGestureClick*, gint, gdouble, gdouble,
-                                    gpointer win_ptr) {
-                      screen_key_press (NULL, GDK_KEY_space, 0,
-                                        (GdkModifierType)0, win_ptr);
-                    }), win);
-  gtk_widget_add_controller (overlay, GTK_EVENT_CONTROLLER (tap));
-
   gtk_window_present (GTK_WINDOW (win));
+  sd_screen_apply_color ();
 
   sd_set (sd_screen_val, "%s", acc_tr (ACC_T_SCREEN_TEST_RUNNING));
   sd_pill (sd_screen_pill, "UNKNOWN", "off");
@@ -698,7 +784,9 @@ check_services (void)
           acc_tr (gfx    ? ACC_T_RUNNING   : ACC_T_STOPPED),
           acc_tr (helper ? ACC_T_INSTALLED : ACC_T_MISSING));
 
-  gboolean warn = gfx || gx.supergfx_leftover || !helper;
+  /* supergfxd running is normal; only a leftover blacklist or a missing
+   * helper is a real warning. */
+  gboolean warn = gx.supergfx_leftover || !helper;
   sd_pill (sd_svc_pill, warn ? "WARN" : "PASS", warn ? "soon" : "on");
   if (sd_report_text)
     g_string_append_printf (sd_report_text,

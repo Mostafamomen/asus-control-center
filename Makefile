@@ -1,7 +1,7 @@
 # ASUSCraft
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-VERSION  ?= 0.6.0
+VERSION  ?= 0.9.0
 CXX      ?= g++
 CXXFLAGS ?= -O2 -g -Wall -Wextra
 CXXFLAGS += -std=gnu++20
@@ -26,8 +26,8 @@ SRCS = src/main.cpp \
        src/control/gfx.cpp src/control/muxreq.cpp src/control/softdim.cpp src/control/backlight.cpp \
        src/user/user.cpp \
        src/ui/window.cpp src/ui/home.cpp src/ui/theme.cpp src/ui/ring.cpp \
-       src/ui/spark.cpp src/ui/pages.cpp src/ui/hubs.cpp src/ui/mcui.cpp \
-       src/ui/login.cpp src/ui/specs.cpp src/ui/sysdiag.cpp
+       src/ui/spark.cpp src/ui/pages.cpp src/ui/hubs.cpp src/ui/sysdiag.cpp \
+       src/ui/sysmgr.cpp src/ui/softcenter.cpp src/ui/mcui.cpp src/ui/login.cpp src/ui/specs.cpp
 
 BIN = asus-control-center
 

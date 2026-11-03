@@ -5,6 +5,8 @@
 #include "home.h"
 #include "pages.h"
 #include "hubs.h"
+#include "sysmgr.h"
+#include "softcenter.h"
 #include "theme.h"
 #include "mcui.h"
 #include "login.h"
@@ -615,6 +617,8 @@ acc_ui_boot (GtkApplication *app)
     { "computer-symbolic",                ACC_T_NAV_HW,     "hardware"      },
     { "applications-utilities-symbolic",  ACC_T_NAV_DIAG,   "diagnosis"     },
     { "software-update-available-symbolic", ACC_T_NAV_UPD,  "support"       },
+    { "applications-system-symbolic",     ACC_T_SERVICE,   "sysmgr"        },
+    { "application-x-executable-symbolic", ACC_T_SERVICE,  "softcenter"    },
     { "emblem-system-symbolic",           ACC_T_NAV_SET,    "settings"      },
   };
   enum { NAV_DEV_END = 4 };   /* rows 0..4 belong to the "Device" group */
@@ -641,6 +645,8 @@ acc_ui_boot (GtkApplication *app)
   gtk_stack_add_named (GTK_STACK (stack), acc_page_hardware (ui), "hardware");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_diagnosis (ui), "diagnosis");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_updates (ui), "support");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_sysmgr (ui), "sysmgr");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_softcenter (ui), "softcenter");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_settings (ui), "settings");
 
   /* restore the collapsed/expanded state from the last session */
@@ -733,6 +739,8 @@ acc_ui_destroy (void)
 {
   acc_page_teardown ();
   acc_hubs_teardown ();
+  acc_sysmgr_teardown ();
+  acc_softcenter_teardown ();
   g_side = NULL;
   g_brandmark = NULL;
   g_uchip = NULL;
