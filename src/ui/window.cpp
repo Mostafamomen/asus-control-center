@@ -8,6 +8,7 @@
 #include "sysmgr.h"
 #include "softcenter.h"
 #include "pcmanager.h"
+#include "systest.h"
 #include "quickactions.h"
 #include "theme.h"
 #include "mcui.h"
@@ -614,31 +615,32 @@ acc_ui_boot (GtkApplication *app)
   gtk_list_box_set_selection_mode (nav, GTK_SELECTION_SINGLE);
   /* stable page identifiers (used by nav rows and the dashboard ">" buttons) */
   struct { const gchar *icon; AccStr txt; const gchar *page; } navs[] = {
-    { "view-grid-symbolic",               ACC_T_NAV_HOME,   "home"          },
-    { "emblem-system-symbolic",           ACC_T_NAV_CUSTOM, "customization" },
-    { "computer-symbolic",                ACC_T_NAV_HW,     "hardware"      },
-    { "applications-utilities-symbolic",  ACC_T_NAV_DIAG,   "diagnosis"     },
-    { "view-refresh-symbolic",            ACC_T_NAV_HOME,   "quickactions"  },
-    { "applications-system-symbolic",     ACC_T_SERVICE,   "sysmgr"        },
-    { "application-x-executable-symbolic", ACC_T_SERVICE,  "softcenter"    },
-    { "computer-symbolic",                ACC_T_SERVICE,   "pcmanager"     },
-    { "software-update-available-symbolic", ACC_T_NAV_UPD,  "support"       },
-    { "emblem-system-symbolic",           ACC_T_NAV_SET,    "settings"      },
+    { "view-grid-symbolic",               ACC_T_NAV_HOME,     "home"          },  /* 0 */
+    { "emblem-system-symbolic",           ACC_T_NAV_CUSTOM,   "customization" },  /* 1 */
+    { "computer-symbolic",                ACC_T_NAV_HW,       "hardware"      },  /* 2 */
+    { "applications-utilities-symbolic",  ACC_T_NAV_DIAG,     "diagnosis"     },  /* 3 */
+    { "computer-fail-symbolic",           ACC_T_NAV_SYSTEST,  "systest"       },  /* 4 */
+    { "view-refresh-symbolic",            ACC_T_NAV_HOME,     "quickactions"  },  /* 5 */
+    { "applications-system-symbolic",     ACC_T_SERVICE,      "sysmgr"        },  /* 6 */
+    { "application-x-executable-symbolic", ACC_T_SERVICE,    "softcenter"    },  /* 7 */
+    { "computer-symbolic",                ACC_T_SERVICE,      "pcmanager"     },  /* 8 */
+    { "software-update-available-symbolic", ACC_T_NAV_UPD,    "support"       },  /* 9 */
+    { "emblem-system-symbolic",           ACC_T_NAV_SET,      "settings"      },  /* 10 */
   };
   /* Hardware group: rows 0..4 */
   gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_HW));
   for (guint i = 0; i <= 4; i++)
     gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
                                           navs[i].page));
-  /* Software group: rows 5..8 */
+  /* Software group: rows 5..9 */
   gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_SW));
-  for (guint i = 5; i <= 8; i++)
+  for (guint i = 5; i <= 9; i++)
     gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
                                           navs[i].page));
-  /* Settings group: row 9 */
+  /* Settings group: row 10 */
   gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_PREF));
-  gtk_list_box_append (nav, mk_nav_row (navs[9].icon, navs[9].txt,
-                                        navs[9].page));
+  gtk_list_box_append (nav, mk_nav_row (navs[10].icon, navs[10].txt,
+                                        navs[10].page));
 
   GtkWidget *stack = gtk_stack_new ();
   g_stack = stack;
@@ -657,6 +659,7 @@ acc_ui_boot (GtkApplication *app)
   gtk_stack_add_named (GTK_STACK (stack), acc_page_sysmgr (ui), "sysmgr");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_softcenter (ui), "softcenter");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_pcmanager (ui), "pcmanager");
+  gtk_stack_add_named (GTK_STACK (stack), acc_systest_page (ui), "systest");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_settings (ui), "settings");
 
   /* restore the collapsed/expanded state from the last session */
@@ -752,6 +755,7 @@ acc_ui_destroy (void)
   acc_sysmgr_teardown ();
   acc_softcenter_teardown ();
   acc_pcmanager_teardown ();
+  acc_systest_teardown ();
   g_side = NULL;
   g_brandmark = NULL;
   g_uchip = NULL;

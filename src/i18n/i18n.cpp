@@ -226,6 +226,8 @@ static const gchar *EN[ACC_T_COUNT] = {
   "Touchpad device present",
   "No touchpad entry found in /proc/bus/input/devices",
   "No non-hub USB devices found",
+  "System Testing",
+  "Hardware and software diagnostic tests.",
 };
 
 static const gchar *AR[ACC_T_COUNT] = {
@@ -448,6 +450,8 @@ static const gchar *AR[ACC_T_COUNT] = {
   "تم العثور على لوحة اللمس",
   "لم يُعثر على لوحة لمس في /proc/bus/input/devices",
   "لا أجهزة USB غير المراكز الجذرية",
+  "اختبار النظام",
+  "اختبارات تشخيصية للعتاد والبرمجيات.",
 };
 
 /* count mismatch guard: arrays must both be exactly ACC_T_COUNT long */

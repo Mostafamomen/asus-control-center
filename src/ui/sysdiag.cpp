@@ -1524,6 +1524,45 @@ acc_sysdiag_page (AccUI *u)
     gtk_box_append (GTK_BOX (page), bar);
   }
 
+  /* ---- System Testing shortcut panel ---- */
+  {
+    GtkWidget *panel = mc_card ();
+    GtkWidget *row   = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
+
+    GtkWidget *im = gtk_image_new_from_icon_name ("media-playback-start-symbolic");
+    gtk_image_set_pixel_size (GTK_IMAGE (im), 20);
+    gtk_widget_add_css_class (im, "cardicon");
+    gtk_widget_set_valign (im, GTK_ALIGN_CENTER);
+
+    GtkWidget *col = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand (col, TRUE);
+    gtk_widget_set_valign (col, GTK_ALIGN_CENTER);
+    gtk_box_append (GTK_BOX (col),
+                    mc_title (acc_i18n_lang () == ACC_LANG_AR
+                              ? "اختبار النظام" : "System Testing"));
+    GtkWidget *sub = mc_label (
+        acc_i18n_lang () == ACC_LANG_AR
+        ? "اختبارات تفاعلية للوحة اللمس والمكبر والميكروفون والكاميرا والشبكة."
+        : "Interactive tests for touchpad, speaker, microphone, camera, and network.",
+        "caption", 0);
+    gtk_label_set_wrap (GTK_LABEL (sub), TRUE);
+    gtk_label_set_max_width_chars (GTK_LABEL (sub), 60);
+    gtk_box_append (GTK_BOX (col), sub);
+
+    GtkWidget *btn = mc_primary (acc_i18n_lang () == ACC_LANG_AR
+                                 ? "فتح" : "Open");
+    gtk_widget_set_valign (btn, GTK_ALIGN_CENTER);
+    g_signal_connect_swapped (btn, "clicked",
+                              G_CALLBACK (acc_ui_nav_to),
+                              (gpointer) "systest");
+
+    gtk_box_append (GTK_BOX (row), im);
+    gtk_box_append (GTK_BOX (row), col);
+    gtk_box_append (GTK_BOX (row), btn);
+    gtk_box_append (GTK_BOX (panel), row);
+    gtk_box_append (GTK_BOX (page), panel);
+  }
+
   /* ---- Hardware Checks group ---- */
   {
     GtkWidget *flow = NULL;
