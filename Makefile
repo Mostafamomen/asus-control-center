@@ -1,7 +1,7 @@
 # ASUSCraft
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-VERSION  ?= 1.12.0
+VERSION  ?= 1.20.0
 CXX      ?= g++
 CXXFLAGS ?= -O2 -g -Wall -Wextra
 CXXFLAGS += -std=gnu++20

@@ -1,5 +1,5 @@
 Name:           asus-control-center
-Version:        1.12.0
+Version:        1.20.0
 Release:        1%{?dist}
 Summary:        Battery, performance, GPU and display controls for ASUS laptops
 
@@ -61,7 +61,7 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.asus
 %{_datadir}/asus-control-center/
 
 %changelog
-* Tue Nov 04 2026 Mostafa Momen <mostafamomen6521@gmail.com> - 1.12.0-1
+* Tue Nov 04 2026 Mostafa Momen <mostafamomen6521@gmail.com> - 1.20.0-1
 - Security Center: read-only Overview/Firewall/Boot & Kernel/Applications/
   Privacy/Tools checks with Secure/Warning/Critical/Unknown/Unsupported status
 - Opt-in security scans (ClamAV/Lynis/rkhunter/chkrootkit/AIDE) with timeout,
