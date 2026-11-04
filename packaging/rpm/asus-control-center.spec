@@ -1,5 +1,5 @@
 Name:           asus-control-center
-Version:        1.1.0
+Version:        1.12.0
 Release:        1%{?dist}
 Summary:        Battery, performance, GPU and display controls for ASUS laptops
 
@@ -61,6 +61,16 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.asus
 %{_datadir}/asus-control-center/
 
 %changelog
+* Tue Nov 04 2026 Mostafa Momen <mostafamomen6521@gmail.com> - 1.12.0-1
+- Security Center: read-only Overview/Firewall/Boot & Kernel/Applications/
+  Privacy/Tools checks with Secure/Warning/Critical/Unknown/Unsupported status
+- Opt-in security scans (ClamAV/Lynis/rkhunter/chkrootkit/AIDE) with timeout,
+  cancel and history; never auto-install, quarantine or delete
+- Three-layer scrolling depth effect (parallax background + card entrance),
+  respecting reduced-motion, with intensity and on/off settings
+- Diagnostics: shared accent-badge card header
+- Fix missing cpu/memory icons on Fedora Adwaita
+
 * Tue Nov 04 2026 Mostafa Momen <mostafamomen6521@gmail.com> - 1.1.0-1
 - MyASUS-inspired UI/UX redesign: unified cyan/teal palette, responsive
   dashboard, streamlined navigation

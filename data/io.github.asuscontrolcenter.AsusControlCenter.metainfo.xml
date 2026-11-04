@@ -69,6 +69,16 @@
     <keyword>oled</keyword>
   </keywords>
   <releases>
+    <release version="1.12.0" date="2026-11-04">
+      <description>
+        <p>Security Center and a three-layer scrolling depth effect.</p>
+        <ul>
+          <li>Read-only Security Center: Secure Boot, firewall, SELinux, updates, kernel, privacy and more</li>
+          <li>Opt-in security scans (ClamAV/Lynis/rkhunter/chkrootkit/AIDE) with timeout, cancel and history</li>
+          <li>Subtle three-layer scrolling depth, respecting reduced-motion, with intensity settings</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-11-04">
       <description>
         <p>MyASUS-inspired UI/UX redesign and interactive system tools.</p>

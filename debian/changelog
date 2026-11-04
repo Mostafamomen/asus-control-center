@@ -1,3 +1,19 @@
+asus-control-center (1.12.0) unstable; urgency=medium
+
+  * Security Center: a read-only security overview (Overview, Firewall,
+    Boot & Kernel, Applications, Privacy, Tools) with Secure/Warning/
+    Critical/Unknown/Unsupported status, details and last-checked time.
+  * Opt-in security scans (ClamAV, Lynis, rkhunter, chkrootkit, AIDE) with
+    confirmation, timeout, cancel and a retention-capped history. Scans are
+    read-only: no auto-install, no quarantine, no file deletion.
+  * Three-layer scrolling depth effect: a subtle parallax background, normal
+    content scroll and card entrance, respecting the reduced-motion
+    preference, with on/off and intensity settings.
+  * Diagnostics cards use the shared accent-badge header.
+  * Fix missing cpu/memory symbolic icons on Fedora Adwaita.
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Tue, 04 Nov 2026 20:00:00 +0300
+
 asus-control-center (1.1.0) unstable; urgency=medium
 
   * MyASUS-inspired UI/UX redesign: unified cyan/teal palette, responsive
