@@ -34,7 +34,34 @@ GtkWidget *mc_title  (const gchar *text);            /* card heading         */
 /* containers ------------------------------------------------------------ */
 GtkWidget *mc_card   (void);                         /* plain white card     */
 GtkWidget *mc_panel  (const gchar *title);           /* accent card + header */
-GtkWidget *mc_page   (GtkWidget *child);             /* scrollable page body */
+GtkWidget *mc_page   (GtkWidget *child);             /* scrollable, width-clamped body */
+
+/* responsive card grid: a GtkFlowBox tuned for cards (homogeneous, wraps
+ * from max_cols down to 1 as the window narrows). Append cards with
+ * gtk_flow_box_append (). */
+GtkWidget *mc_grid   (int min_cols, int max_cols);
+
+/* Scrollable, width-clamped page body with the three-layer depth effect:
+ *   1. a subtle parallax background that drifts slower than the content,
+ *   2. the normal content scroll,
+ *   3. cards that rise + fade in as they appear (foreground).
+ * The effect is applied only when the user enabled scrolling effects AND the
+ * desktop allows animations (reduced-motion off); otherwise this behaves
+ * exactly like mc_page (). Safe for mouse/touchpad/keyboard and RTL. */
+GtkWidget *mc_page_layered (GtkWidget *child);
+
+/* TRUE when scrolling effects should run (pref on + animations allowed). */
+gboolean   mc_fx_active (void);
+
+/* card with a header row (accent icon badge + title) and an empty vertical
+ * body; the body box is returned through out_body for the caller to fill. */
+GtkWidget *mc_card_titled (const gchar *icon, const gchar *title,
+                           GtkWidget **out_body);
+
+/* compact dashboard stat tile: accent icon, a big value (returned through
+ * out_value, "—" until set) and a caption underneath. */
+GtkWidget *mc_stat   (const gchar *icon, const gchar *caption,
+                      GtkWidget **out_value);
 
 /* MyASUS three-column setting block: icon | text | controls ------------- */
 GtkWidget *mc_feature (const gchar *icon, const gchar *title,

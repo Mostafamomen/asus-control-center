@@ -20,6 +20,22 @@ void        acc_theme_save_pref (gboolean dark);
 gboolean    acc_theme_gray_pref (void);
 void        acc_theme_save_gray (gboolean gray);
 
+/* App preferences shared by the settings page and the toast layer */
+gboolean    acc_pref_notifications (void);
+void        acc_pref_set_notifications (gboolean on);
+gboolean    acc_autostart_enabled (void);
+gboolean    acc_autostart_set (gboolean on, gchar **err);
+
+/* Security Center + scrolling-animation preferences */
+gboolean     acc_pref_anim_enabled (void);              /* scroll depth FX   */
+void         acc_pref_set_anim_enabled (gboolean on);
+const gchar *acc_pref_anim_intensity (void);            /* subtle|balanced|enhanced */
+void         acc_pref_set_anim_intensity (const gchar *level);
+gboolean     acc_pref_security_notify (void);
+void         acc_pref_set_security_notify (gboolean on);
+int          acc_pref_scan_keep (void);                 /* scan-history size */
+void         acc_pref_set_scan_keep (int n);
+
 /* absolute path of the stylesheet matching the current mode */
 gchar      *acc_theme_css_path (void);
 

@@ -1,7 +1,7 @@
-# ASUS Control Center
+# ASUSCraft
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-VERSION  ?= 0.4.0
+VERSION  ?= 1.20.0
 CXX      ?= g++
 CXXFLAGS ?= -O2 -g -Wall -Wextra
 CXXFLAGS += -std=gnu++20
@@ -23,11 +23,12 @@ SRCS = src/main.cpp \
        src/probe/hwmon.cpp src/probe/gpu.cpp src/probe/display.cpp \
        src/probe/sysinfo.cpp src/probe/load.cpp src/probe/devs.cpp \
        src/control/brightness.cpp src/control/ctl.cpp src/control/asusd.cpp \
-       src/control/gfx.cpp src/control/softdim.cpp src/control/backlight.cpp \
+       src/control/gfx.cpp src/control/muxreq.cpp src/control/softdim.cpp src/control/backlight.cpp \
        src/user/user.cpp \
        src/ui/window.cpp src/ui/home.cpp src/ui/theme.cpp src/ui/ring.cpp \
-       src/ui/spark.cpp src/ui/pages.cpp src/ui/mcui.cpp src/ui/login.cpp \
-       src/ui/specs.cpp
+       src/ui/spark.cpp src/ui/pages.cpp src/ui/hubs.cpp src/ui/sysdiag.cpp \
+       src/ui/sysmgr.cpp src/ui/softcenter.cpp src/ui/security.cpp \
+       src/ui/mcui.cpp src/ui/login.cpp src/ui/specs.cpp
 
 BIN = asus-control-center
 
@@ -36,7 +37,12 @@ $(BIN): $(SRCS)
 	  $(shell pkg-config --cflags $(PKGS)) -o $@ $^ \
 	  $(LDFLAGS) $(shell pkg-config --libs $(PKGS))
 
-test: $(BIN)
+launcher-bin:
+	$(MAKE) -C launcher
+
+test: $(BIN) launcher-bin
+	./$(BIN) --check
+	bash -n data/acc-helper
 	./$(BIN) --self-test
 
 install: $(BIN)
@@ -48,6 +54,10 @@ install: $(BIN)
 	  > $(DESTDIR)$(DATADIR)/applications/$(APP_ID).desktop
 	install -Dm0644 data/$(APP_ID).svg \
 	  $(DESTDIR)$(DATADIR)/icons/hicolor/scalable/apps/$(APP_ID).svg
+	for size in 16x16 24x24 32x32 48x48 64x64 128x128 256x256 512x512; do \
+	  install -Dm0644 data/icons/hicolor/$$size/apps/$(APP_ID).png \
+	    $(DESTDIR)$(DATADIR)/icons/hicolor/$$size/apps/$(APP_ID).png; \
+	done
 	install -Dm0644 data/$(APP_ID).metainfo.xml \
 	  $(DESTDIR)$(DATADIR)/metainfo/$(APP_ID).metainfo.xml
 	install -Dm0644 docs/$(BIN).1 $(DESTDIR)$(MANDIR)/man1/$(BIN).1

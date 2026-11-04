@@ -76,6 +76,7 @@ GtkWidget  *acc_ui_root (void);
 const gchar *acc_status_tr (const gchar *hw_status); /* Charging->شحن … */
 void        acc_ui_lang_toggle (void);               /* EN ع switch   */
 void        acc_ui_theme_toggle (void);              /* light/dark swap */
+void        acc_ui_rebuild (void);                   /* rebuild window in place */
 
 G_END_DECLS
 #endif

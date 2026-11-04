@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "mcui.h"
+#include "theme.h"
+#include <adwaita.h>
 
 /* ------------------------------------------------------------------ */
 /* basic text                                                          */
@@ -64,8 +66,9 @@ mc_panel (const gchar *title)
   return box;
 }
 
-GtkWidget *
-mc_page (GtkWidget *child)
+/* the plain scrollable, width-clamped page body (no depth effect) */
+static GtkWidget *
+mc_build_scroll (GtkWidget *child)
 {
   GtkWidget *sc = gtk_scrolled_window_new ();
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sc),
@@ -76,8 +79,178 @@ mc_page (GtkWidget *child)
   gtk_widget_set_margin_start (wrap, 20);
   gtk_widget_set_margin_end (wrap, 20);
   gtk_box_append (GTK_BOX (wrap), child);
-  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (sc), wrap);
+
+  /* Clamp the readable width so pages don't stretch edge-to-edge on wide
+   * screens. Content caps at a comfortable width and centres. */
+  GtkWidget *clamp = adw_clamp_new ();
+  adw_clamp_set_maximum_size (ADW_CLAMP (clamp), 1180);
+  adw_clamp_set_tightening_threshold (ADW_CLAMP (clamp), 900);
+  adw_clamp_set_child (ADW_CLAMP (clamp), wrap);
+
+  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (sc), clamp);
   return sc;
+}
+
+/* ---- three-layer scrolling depth (background parallax + card entrance) ---- */
+gboolean
+mc_fx_active (void)
+{
+  if (!acc_pref_anim_enabled ())
+    return FALSE;
+  /* GTK folds the desktop's reduced-motion preference into this setting */
+  gboolean anim = TRUE;
+  GtkSettings *s = gtk_settings_get_default ();
+  if (s)
+    g_object_get (s, "gtk-enable-animations", &anim, NULL);
+  return anim;
+}
+
+static double
+mc_fx_factor (void)
+{
+  const gchar *l = acc_pref_anim_intensity ();
+  if (g_strcmp0 (l, "subtle") == 0)   return 0.08;
+  if (g_strcmp0 (l, "enhanced") == 0) return 0.26;
+  return 0.15;   /* balanced */
+}
+
+typedef struct { GtkWidget *area; double offset; } McParallax;
+
+static void
+mc_parallax_draw (GtkDrawingArea *a, cairo_t *cr, int w, int h, gpointer u)
+{
+  (void) a;
+  McParallax *p = (McParallax *) u;
+  GdkRGBA c;
+  if (!gdk_rgba_parse (&c, acc_theme_col_accent ()))
+    return;
+  double off = p->offset;
+  /* three soft accent blobs that drift at different rates => depth.
+   * Alpha is deliberately very low so the background never competes with
+   * the content. */
+  const double bx[] = { 0.18, 0.84, 0.55 };
+  const double by[] = { 0.20, 0.66, 1.15 };
+  const double br[] = { 0.42, 0.52, 0.48 };
+  const double ba[] = { 0.06, 0.05, 0.045 };
+  const double rate[] = { 0.55, 0.85, 0.35 };
+  for (int i = 0; i < 3; i++)
+    {
+      double cx = w * bx[i];
+      double cy = h * by[i] - off * rate[i];
+      double r = (w > h ? w : h) * br[i];
+      cairo_pattern_t *pat = cairo_pattern_create_radial (cx, cy, 0, cx, cy, r);
+      cairo_pattern_add_color_stop_rgba (pat, 0, c.red, c.green, c.blue, ba[i]);
+      cairo_pattern_add_color_stop_rgba (pat, 1, c.red, c.green, c.blue, 0.0);
+      cairo_set_source (cr, pat);
+      cairo_arc (cr, cx, cy, r, 0, 2 * G_PI);
+      cairo_fill (cr);
+      cairo_pattern_destroy (pat);
+    }
+}
+
+static void
+mc_on_vadj (GtkAdjustment *adj, gpointer u)
+{
+  McParallax *p = (McParallax *) u;
+  p->offset = gtk_adjustment_get_value (adj) * mc_fx_factor ();
+  if (p->area)
+    gtk_widget_queue_draw (p->area);
+}
+
+GtkWidget *
+mc_page_layered (GtkWidget *child)
+{
+  GtkWidget *sc = mc_build_scroll (child);
+  if (!mc_fx_active ())
+    return sc;   /* plain page when effects are off or reduced-motion is on */
+
+  /* background parallax layer behind the (transparent) content */
+  GtkWidget *overlay = gtk_overlay_new ();
+  GtkWidget *area = gtk_drawing_area_new ();
+  McParallax *p = g_new0 (McParallax, 1);
+  p->area = area;
+  gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (area), mc_parallax_draw,
+                                  p, NULL);
+  gtk_overlay_set_child (GTK_OVERLAY (overlay), area);   /* bottom layer */
+
+  gtk_widget_add_css_class (sc, "fxscroll");            /* transparent bg */
+  gtk_widget_add_css_class (child, "fxcards");          /* card entrance  */
+  gtk_overlay_add_overlay (GTK_OVERLAY (overlay), sc);  /* content on top */
+  g_object_set_data_full (G_OBJECT (overlay), "mc-parallax", p, g_free);
+
+  GtkAdjustment *vadj =
+    gtk_scrolled_window_get_vadjustment (GTK_SCROLLED_WINDOW (sc));
+  g_signal_connect (vadj, "value-changed", G_CALLBACK (mc_on_vadj), p);
+  return overlay;
+}
+
+GtkWidget *
+mc_page (GtkWidget *child)
+{
+  /* every page built with mc_page gets the depth effect when it is enabled */
+  return mc_page_layered (child);
+}
+
+GtkWidget *
+mc_grid (int min_cols, int max_cols)
+{
+  GtkWidget *flow = gtk_flow_box_new ();
+  gtk_flow_box_set_selection_mode (GTK_FLOW_BOX (flow), GTK_SELECTION_NONE);
+  gtk_flow_box_set_homogeneous (GTK_FLOW_BOX (flow), TRUE);
+  gtk_flow_box_set_row_spacing (GTK_FLOW_BOX (flow), 14);
+  gtk_flow_box_set_column_spacing (GTK_FLOW_BOX (flow), 14);
+  gtk_flow_box_set_min_children_per_line (GTK_FLOW_BOX (flow),
+                                          MAX (1, min_cols));
+  gtk_flow_box_set_max_children_per_line (GTK_FLOW_BOX (flow),
+                                          MAX (min_cols, max_cols));
+  gtk_widget_add_css_class (flow, "cardgrid");
+  return flow;
+}
+
+GtkWidget *
+mc_card_titled (const gchar *icon, const gchar *title, GtkWidget **out_body)
+{
+  GtkWidget *c = mc_card ();
+  GtkWidget *head = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
+  if (icon)
+    {
+      GtkWidget *badge = mc_badge (icon, 18);
+      gtk_widget_set_valign (badge, GTK_ALIGN_CENTER);
+      gtk_box_append (GTK_BOX (head), badge);
+    }
+  gtk_box_append (GTK_BOX (head), mc_title (title));
+  gtk_box_append (GTK_BOX (c), head);
+
+  GtkWidget *body = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
+  gtk_widget_set_vexpand (body, TRUE);
+  gtk_box_append (GTK_BOX (c), body);
+  if (out_body)
+    *out_body = body;
+  return c;
+}
+
+GtkWidget *
+mc_stat (const gchar *icon, const gchar *caption, GtkWidget **out_value)
+{
+  GtkWidget *tile = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
+  gtk_widget_add_css_class (tile, "tile");
+
+  GtkWidget *badge = mc_badge (icon, 20);
+  gtk_widget_set_valign (badge, GTK_ALIGN_CENTER);
+  gtk_box_append (GTK_BOX (tile), badge);
+
+  GtkWidget *col = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+  gtk_widget_set_valign (col, GTK_ALIGN_CENTER);
+  gtk_widget_set_hexpand (col, TRUE);
+  GtkWidget *val = mc_label ("—", "statval", 0);
+  GtkWidget *cap = mc_label (caption, "statcap", 0);
+  gtk_box_append (GTK_BOX (col), val);
+  gtk_box_append (GTK_BOX (col), cap);
+  gtk_box_append (GTK_BOX (tile), col);
+
+  if (out_value)
+    *out_value = val;
+  return tile;
 }
 
 /* ------------------------------------------------------------------ */
@@ -240,89 +413,29 @@ mc_gray_new (GtkWidget *child)
 }
 
 /* ---------------------------------------------------------- brand mark -- */
-/* Rounded-rect helper (cairo has no primitive for it). */
-static void
-round_rect (cairo_t *cr, double x, double y, double w, double h, double r)
-{
-  cairo_new_sub_path (cr);
-  cairo_arc (cr, x + w - r, y + r,     r, -G_PI / 2, 0);
-  cairo_arc (cr, x + w - r, y + h - r, r, 0,          G_PI / 2);
-  cairo_arc (cr, x + r,     y + h - r, r, G_PI / 2,   G_PI);
-  cairo_arc (cr, x + r,     y + r,     r, G_PI,       3 * G_PI / 2);
-  cairo_close_path (cr);
-}
-
-/* Design space is 256x256 (same numbers as assets/logo.svg); everything is
- * scaled from that, so a 22 px sidebar mark and a 116 px login mark are the
- * same artwork. A bitmap GtkPicture would advertise its 256 px texture as
- * the natural size and ignore the widget request — cairo cannot. */
-static void
-brand_draw (GtkDrawingArea *da, cairo_t *cr, int w, int h, gpointer user)
-{
-  (void) da;
-  (void) user;
-  double s = (double) MIN (w, h) / 256.0;
-  if (s <= 0)
-    return;
-
-  cairo_save (cr);
-  cairo_translate (cr, (w - 256 * s) / 2.0, (h - 256 * s) / 2.0);
-  cairo_scale (cr, s, s);
-
-  /* tile: diagonal gradient in the two MyASUS blues */
-  /* tile: one flat MyASUS blue — no gradients in this mark */
-  round_rect (cr, 8, 8, 240, 240, 58);
-  cairo_set_source_rgb (cr, 0.000, 0.424, 0.882);   /* #006CE1 */
-  cairo_fill (cr);
-
-  /* hairline highlight */
-  round_rect (cr, 8, 8, 240, 240, 58);
-  cairo_set_line_width (cr, 3);
-  cairo_set_source_rgba (cr, 1, 1, 1, 0.22);
-  cairo_stroke (cr);
-
-  /* dial ring: 270° with round ends, gap at the bottom */
-  cairo_set_line_width (cr, 24);
-  cairo_set_line_cap (cr, CAIRO_LINE_CAP_ROUND);
-  cairo_set_source_rgb (cr, 1, 1, 1);
-  cairo_arc (cr, 128, 128, 70, G_PI * 0.75, G_PI * 2.25);
-  cairo_stroke (cr);
-
-  /* needle */
-  cairo_set_source_rgb (cr, 1, 1, 1);
-  cairo_set_line_width (cr, 20);
-  cairo_move_to (cr, 128, 128);
-  cairo_line_to (cr, 172, 90);
-  cairo_stroke (cr);
-
-  /* hub */
-  cairo_set_source_rgb (cr, 1, 1, 1);
-  cairo_arc (cr, 128, 128, 17, 0, 2 * G_PI);
-  cairo_fill (cr);
-  cairo_set_source_rgb (cr, 0.000, 0.424, 0.882);   /* #006CE1 */
-  cairo_arc (cr, 128, 128, 7, 0, 2 * G_PI);
-  cairo_fill (cr);
-
-  cairo_restore (cr);
-}
-
 GtkWidget *
 mc_brand_mark_new (int px)
 {
-  GtkWidget *da = gtk_drawing_area_new ();
-  gtk_widget_add_css_class (da, "brandmark");
-  /* size request is the *only* determinant here: the drawing area has no
-   * intrinsic size, so the mark is exactly px x px at any scale factor */
-  gtk_widget_set_size_request (da, px, px);
-  gtk_widget_set_hexpand (da, FALSE);
-  gtk_widget_set_vexpand (da, FALSE);
-  gtk_widget_set_halign (da, GTK_ALIGN_CENTER);
-  gtk_widget_set_valign (da, GTK_ALIGN_CENTER);
-  gtk_drawing_area_set_content_width (GTK_DRAWING_AREA (da), px);
-  gtk_drawing_area_set_content_height (GTK_DRAWING_AREA (da), px);
-  gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (da), brand_draw, NULL,
-                                  NULL);
-  return da;
+  gchar *path = acc_asset_path ("asuscraft.png");
+  GtkWidget *mark;
+  if (path)
+    {
+      mark = gtk_image_new_from_file (path);
+      gtk_image_set_pixel_size (GTK_IMAGE (mark), px);
+      g_free (path);
+    }
+  else
+    {
+      mark = gtk_image_new_from_icon_name ("io.github.asuscontrolcenter.AsusControlCenter");
+      gtk_image_set_pixel_size (GTK_IMAGE (mark), px);
+    }
+  gtk_widget_add_css_class (mark, "brandmark");
+  gtk_widget_set_size_request (mark, px, px);
+  gtk_widget_set_hexpand (mark, FALSE);
+  gtk_widget_set_vexpand (mark, FALSE);
+  gtk_widget_set_halign (mark, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (mark, GTK_ALIGN_CENTER);
+  return mark;
 }
 
 void

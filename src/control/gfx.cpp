@@ -1,300 +1,202 @@
-/* control/gfx.cpp - supergfxctl client (see gfx.h)
+/* control/gfx.cpp - read-only dGPU power probe (see gfx.h)
  * SPDX-License-Identifier: GPL-3.0-or-later
- *
- * supergfxd answers slowly (or not at all) while it is busy switching, so
- * nothing here may run on the GTK main thread: the page reads a cached
- * snapshot that a worker thread refreshes, mode requests run in a GTask
- * thread, and every CLI call is capped with timeout(1).
  */
 #include "gfx.h"
 #include "../probe/probe.h"
+#include "../probe/devs.h"
 
 #include <gio/gio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
-#define GFX_CLI     "/usr/bin/supergfxctl"
-#define TIMEOUT_BIN "/usr/bin/timeout"
-#define CLI_SECS    "4"            /* one supergfxctl call, then SIGTERM */
-#define CACHE_US    (3 * G_USEC_PER_SEC)
+#define SUPERGFX_NAME     "org.supergfxctl.Daemon"
+#define SUPERGFX_CLI      "/usr/bin/supergfxctl"
+#define SUPERGFX_MODPROBE "/etc/modprobe.d/supergfxd.conf"
+#define HOLDERS_US        (10 * G_USEC_PER_SEC)
 
-static GMutex      s_lock;
-static AccGfxState s_cache;        /* guarded by s_lock                   */
-static gint64      s_cache_at = 0; /* guarded by s_lock; 0 = stale         */
-static gboolean    s_probing = FALSE;
-
-/* Run supergfxctl with one fixed flag (and an optional mode name), capped
- * by timeout(1) when it exists. Returns stdout+stderr joined, or NULL when
- * it could not run at all; *ok is TRUE only for a zero exit status and
- * *timed_out for timeout's 124. Blocking: worker threads only. */
+/* sysfs directory of the first NVIDIA display controller, or NULL */
 static gchar *
-run_cli (const gchar *flag, const gchar *arg, gboolean *ok,
-         gboolean *timed_out)
+nvidia_pci_dir (void)
 {
-  *ok = FALSE;
-  if (timed_out)
-    *timed_out = FALSE;
-  if (!acc_path_exists (GFX_CLI))
+  GDir *d = g_dir_open ("/sys/bus/pci/devices", 0, NULL);
+  if (!d)
     return NULL;
-
-  GError *e = NULL;
-  gboolean capped = acc_path_exists (TIMEOUT_BIN);
-  const gchar *argv_capped[] = { TIMEOUT_BIN, "-k", "1", CLI_SECS,
-                                 GFX_CLI, flag, arg, NULL };
-  const gchar *argv_plain[]  = { GFX_CLI, flag, arg, NULL };
-  GSubprocess *p = g_subprocess_newv (capped ? argv_capped : argv_plain,
-                                      (GSubprocessFlags)
-                                      (G_SUBPROCESS_FLAGS_STDOUT_PIPE
-                                       | G_SUBPROCESS_FLAGS_STDERR_MERGE),
-                                      &e);
-  if (!p)
+  gchar *found = NULL;
+  const gchar *n;
+  while (!found && (n = g_dir_read_name (d)))
     {
-      g_clear_error (&e);
-      return NULL;
+      gchar *base = g_build_filename ("/sys/bus/pci/devices", n, NULL);
+      gchar *vp = g_build_filename (base, "vendor", NULL);
+      gchar *cp = g_build_filename (base, "class", NULL);
+      gchar *v = acc_read_trim (vp);
+      gchar *c = acc_read_trim (cp);
+      /* class 0x03xxxx = display controller */
+      if (g_strcmp0 (v, "0x10de") == 0 && c && g_str_has_prefix (c, "0x03"))
+        found = g_strdup (base);
+      g_free (v);
+      g_free (c);
+      g_free (vp);
+      g_free (cp);
+      g_free (base);
     }
-
-  gchar *out = NULL;
-  if (!g_subprocess_communicate_utf8 (p, NULL, NULL, &out, NULL, &e))
-    {
-      g_clear_error (&e);
-      g_object_unref (p);
-      return NULL;
-    }
-  gint code = g_subprocess_get_if_exited (p)
-              ? g_subprocess_get_exit_status (p) : -1;
-  *ok = code == 0;
-  if (timed_out)
-    *timed_out = capped && (code == 124 || code == 137 || code < 0);
-  g_object_unref (p);
-  return out ? g_strstrip (out) : g_strdup ("");
+  g_dir_close (d);
+  return found;
 }
 
-static AccGfxMode
-parse_mode (const gchar *s)
-{
-  if (!s || !*s)
-    return ACC_GFX_UNKNOWN;
-  gchar *l = g_ascii_strdown (s, -1);
-  AccGfxMode m = ACC_GFX_UNKNOWN;
-  if (strstr (l, "integrated"))
-    m = ACC_GFX_INTEGRATED;
-  else if (strstr (l, "hybrid"))
-    m = ACC_GFX_HYBRID;
-  else if (strstr (l, "vfio") || strstr (l, "egpu") || strstr (l, "mux")
-           || strstr (l, "modeset"))
-    m = ACC_GFX_OTHER;
-  g_free (l);
-  return m;
-}
-
-/* supergfxctl prints the action as prose; match the stable keywords */
-static AccGfxAction
-parse_action (const gchar *s)
-{
-  if (!s || !*s)
-    return ACC_GFX_ACT_NONE;
-  gchar *l = g_ascii_strdown (s, -1);
-  AccGfxAction a = ACC_GFX_ACT_NONE;
-  if (strstr (l, "logout") || strstr (l, "log out"))
-    a = ACC_GFX_ACT_LOGOUT;
-  else if (strstr (l, "reboot") || strstr (l, "restart"))
-    a = ACC_GFX_ACT_REBOOT;
-  else if (strstr (l, "integrated"))
-    a = ACC_GFX_ACT_INTEGRATED_FIRST;
-  g_free (l);
-  return a;
-}
-
-/* One blocking probe of the daemon (worker thread or the CLI self-test).
- * Returns TRUE when supergfxd was too slow to answer (busy switching). */
 static gboolean
-probe (AccGfxState *out)
+supergfxd_owned (void)
 {
-  memset (out, 0, sizeof *out);
-  out->known = TRUE;
-  out->installed = acc_path_exists (GFX_CLI);
-  if (!out->installed)
+  GDBusConnection *bus = g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL, NULL);
+  if (!bus)
     return FALSE;
-
-  gboolean ok = FALSE, slow = FALSE;
-  gchar *m = run_cli ("-g", NULL, &ok, &slow);
-  if ((m && ok) || slow)
+  GVariant *r = g_dbus_connection_call_sync
+    (bus, "org.freedesktop.DBus", "/org/freedesktop/DBus",
+     "org.freedesktop.DBus", "NameHasOwner",
+     g_variant_new ("(s)", SUPERGFX_NAME), G_VARIANT_TYPE ("(b)"),
+     G_DBUS_CALL_FLAGS_NONE, 800, NULL, NULL);
+  gboolean owned = FALSE;
+  if (r)
     {
-      if (ok)
-        {
-          out->running = TRUE;
-          out->mode = parse_mode (m);
-
-          gchar *sup = run_cli ("-s", NULL, &ok, NULL);
-          out->can_integrated = ok && sup
-                                && strstr (sup, "ntegrated") != NULL;
-          g_free (sup);
-        }
-
-      /* the pending request is still worth reading while it is busy */
-      gchar *pm = run_cli ("-P", NULL, &ok, NULL);
-      out->pending = ok ? parse_mode (pm) : ACC_GFX_UNKNOWN;
-      g_free (pm);
-
-      gchar *pa = run_cli ("-p", NULL, &ok, NULL);
-      out->action = ok ? parse_action (pa) : ACC_GFX_ACT_NONE;
-      g_free (pa);
-
-      /* a "pending" equal to the live mode is not pending */
-      if (out->pending == out->mode)
-        out->pending = ACC_GFX_UNKNOWN;
+      g_variant_get (r, "(b)", &owned);
+      g_variant_unref (r);
     }
-  g_free (m);
-  return slow;
+  g_object_unref (bus);
+  return owned;
 }
 
-static gpointer
-probe_thread (gpointer data)
+gboolean
+acc_gfx_text_blacklists_nvidia (const gchar *text)
 {
-  (void) data;
-  AccGfxState st;
-  gboolean slow = probe (&st);
-
-  g_mutex_lock (&s_lock);
-  /* a busy daemon is not a missing one: keep the last good mode and
-   * capabilities, take the fresh pending request */
-  if (slow && s_cache.running)
+  if (!text)
+    return FALSE;
+  gboolean hit = FALSE;
+  gchar **lines = g_strsplit (text, "\n", -1);
+  for (gint i = 0; lines[i] && !hit; i++)
     {
-      s_cache.pending = st.pending != s_cache.mode ? st.pending
-                                                   : ACC_GFX_UNKNOWN;
-      s_cache.action = st.action;
+      gchar **w = g_strsplit_set (g_strstrip (lines[i]), " \t", -1);
+      gint n = 0;
+      gchar *word[2] = { NULL, NULL };
+      for (gint k = 0; w[k] && n < 2; k++)
+        if (*w[k])
+          word[n++] = w[k];
+      hit = n == 2 && g_strcmp0 (word[0], "blacklist") == 0
+            && g_strcmp0 (word[1], "nvidia") == 0;
+      g_strfreev (w);
     }
-  else
-    s_cache = st;
-  s_cache_at = g_get_monotonic_time ();
-  s_probing = FALSE;
-  g_mutex_unlock (&s_lock);
-  return NULL;
+  g_strfreev (lines);
+  return hit;
+}
+
+/* Comma list of this user's processes holding /dev/nvidia<N> open (the
+ * nodes that keep the dGPU out of runtime D3). Other users' fds are not
+ * readable, which is fine: the list is a hint, never a decision input. */
+static void
+scan_holders (gchar *out, gsize len)
+{
+  out[0] = '\0';
+  GDir *proc = g_dir_open ("/proc", 0, NULL);
+  if (!proc)
+    return;
+  GString *s = g_string_new (NULL);
+  const gchar *pid;
+  while ((pid = g_dir_read_name (proc)))
+    {
+      /* skip non-pids and ASUSCraft itself (its NVML probe opens nvidia0) */
+      if (!g_ascii_isdigit (pid[0]) || atoi (pid) == (int) getpid ())
+        continue;
+      gchar *fdp = g_build_filename ("/proc", pid, "fd", NULL);
+      GDir *fds = g_dir_open (fdp, 0, NULL);
+      gboolean holds = FALSE;
+      const gchar *fd;
+      while (fds && !holds && (fd = g_dir_read_name (fds)))
+        {
+          gchar *lp = g_build_filename (fdp, fd, NULL);
+          gchar *t = g_file_read_link (lp, NULL);
+          /* /dev/nvidia0, /dev/nvidia1 … (not nvidiactl / nvidia-uvm) */
+          holds = t && g_str_has_prefix (t, "/dev/nvidia")
+                  && g_ascii_isdigit (t[strlen ("/dev/nvidia")]);
+          g_free (t);
+          g_free (lp);
+        }
+      if (fds)
+        g_dir_close (fds);
+      g_free (fdp);
+      if (!holds)
+        continue;
+
+      gchar *cp = g_build_filename ("/proc", pid, "comm", NULL);
+      gchar *comm = acc_read_trim (cp);
+      g_free (cp);
+      if (comm && *comm && !strstr (s->str, comm))
+        {
+          if (s->len)
+            g_string_append (s, ", ");
+          g_string_append (s, comm);
+        }
+      g_free (comm);
+    }
+  g_dir_close (proc);
+  g_strlcpy (out, s->str, len);
+  g_string_free (s, TRUE);
 }
 
 gboolean
 acc_gfx_state (AccGfxState *out)
 {
+  static gchar  s_holders[160];
+  static gint64 s_holders_at = 0;
+
   if (!out)
     return FALSE;
+  memset (out, 0, sizeof *out);
+  out->pm = ACC_DGPU_PM_UNKNOWN;
 
-  gboolean start = FALSE;
-  g_mutex_lock (&s_lock);
-  *out = s_cache;
-  if (!s_probing
-      && (!s_cache_at || g_get_monotonic_time () - s_cache_at >= CACHE_US))
-    start = s_probing = TRUE;
-  g_mutex_unlock (&s_lock);
+  gchar *dd = acc_dev_wmi_file ("dgpu_disable");
+  out->has_dgpu_disable = dd != NULL;
+  g_free (dd);
 
-  if (start)
+  out->supergfxd_running = supergfxd_owned ();
+  if (!acc_path_exists (SUPERGFX_CLI))
     {
-      GThread *t = g_thread_try_new ("acc-gfx-probe", probe_thread, NULL,
-                                     NULL);
-      if (t)
-        g_thread_unref (t);
-      else
+      gchar *txt = NULL;
+      if (g_file_get_contents (SUPERGFX_MODPROBE, &txt, NULL, NULL))
+        out->supergfx_leftover = acc_gfx_text_blacklists_nvidia (txt);
+      g_free (txt);
+    }
+
+  gchar *pci = nvidia_pci_dir ();
+  out->dgpu_present = pci != NULL;
+  if (pci)
+    {
+      gchar *rp = g_build_filename (pci, "power", "runtime_status", NULL);
+      gchar *rs = acc_read_trim (rp);
+      if (g_strcmp0 (rs, "suspended") == 0)
+        out->pm = ACC_DGPU_PM_SUSPENDED;
+      else if (g_strcmp0 (rs, "active") == 0)
+        out->pm = ACC_DGPU_PM_ACTIVE;
+      g_free (rs);
+      g_free (rp);
+      g_free (pci);
+    }
+
+  if (out->pm == ACC_DGPU_PM_ACTIVE)
+    {
+      gint64 now = g_get_monotonic_time ();
+      if (!s_holders_at || now - s_holders_at >= HOLDERS_US)
         {
-          g_mutex_lock (&s_lock);
-          s_probing = FALSE;
-          g_mutex_unlock (&s_lock);
+          scan_holders (s_holders, sizeof s_holders);
+          s_holders_at = now;
         }
+      g_strlcpy (out->holders, s_holders, sizeof out->holders);
     }
-  return out->running;
+  return out->dgpu_present;
 }
 
 gboolean
-acc_gfx_state_sync (AccGfxState *out)
+acc_gfx_integrated_supported (const AccGfxState *st)
 {
-  if (!out)
-    return FALSE;
-  probe (out);
-  return out->running;
-}
-
-/* ---- mode request (GTask worker) ------------------------------------ */
-
-typedef struct
-{
-  AccGfxMode   mode;
-  AccGfxAction action;
-  gchar       *err;
-} SetJob;
-
-static void
-set_job_free (gpointer p)
-{
-  SetJob *j = (SetJob *) p;
-  g_free (j->err);
-  g_free (j);
-}
-
-static void
-set_thread (GTask *task, gpointer src, gpointer data, GCancellable *c)
-{
-  (void) src;
-  (void) c;
-  SetJob *j = (SetJob *) data;
-  const gchar *name = j->mode == ACC_GFX_INTEGRATED ? "Integrated" : "Hybrid";
-
-  gboolean ok = FALSE, slow = FALSE;
-  gchar *msg = run_cli ("-m", name, &ok, &slow);
-
-  /* supergfxctl may sit waiting on the daemon while it prepares the
-   * switch. If it timed out, trust the daemon's pending mode instead. */
-  if (!ok && slow)
-    {
-      gboolean pok = FALSE;
-      gchar *pm = run_cli ("-P", NULL, &pok, NULL);
-      gchar *gm = run_cli ("-g", NULL, &ok, NULL);
-      ok = (pok && parse_mode (pm) == j->mode)
-           || (ok && parse_mode (gm) == j->mode);
-      g_free (pm);
-      g_free (gm);
-      if (ok && !msg)
-        msg = g_strdup ("logout");
-    }
-
-  if (ok)
-    {
-      gboolean pok = FALSE;
-      gchar *pa = run_cli ("-p", NULL, &pok, NULL);
-      j->action = parse_action (pok && pa && *pa ? pa : msg);
-      g_free (pa);
-    }
-  else
-    j->err = msg && *msg ? g_strdup (msg)
-                         : g_strdup (slow ? "supergfxd did not answer"
-                                          : "supergfxctl is not available");
-  g_free (msg);
-
-  g_mutex_lock (&s_lock);
-  s_cache_at = 0;                     /* next read must be fresh */
-  g_mutex_unlock (&s_lock);
-
-  g_task_return_boolean (task, ok);
-}
-
-void
-acc_gfx_set_mode_async (AccGfxMode mode, GAsyncReadyCallback cb,
-                        gpointer user)
-{
-  GTask *t = g_task_new (NULL, NULL, cb, user);
-  SetJob *j = g_new0 (SetJob, 1);
-  j->mode = mode == ACC_GFX_INTEGRATED ? ACC_GFX_INTEGRATED : ACC_GFX_HYBRID;
-  g_task_set_task_data (t, j, set_job_free);
-  g_task_run_in_thread (t, set_thread);
-  g_object_unref (t);
-}
-
-gboolean
-acc_gfx_set_mode_finish (GAsyncResult *res, AccGfxAction *action,
-                         gchar **err)
-{
-  GTask *t = G_TASK (res);
-  SetJob *j = (SetJob *) g_task_get_task_data (t);
-  gboolean ok = g_task_propagate_boolean (t, NULL);
-  if (action)
-    *action = j->action;
-  if (err)
-    *err = ok ? NULL : g_strdup (j->err);
-  return ok;
+  /* No model has been verified yet; see docs/gpu-mux.md, "Integrated". */
+  (void) st;
+  return FALSE;
 }

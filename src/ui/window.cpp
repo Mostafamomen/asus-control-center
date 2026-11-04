@@ -4,6 +4,10 @@
 #include "window.h"
 #include "home.h"
 #include "pages.h"
+#include "hubs.h"
+#include "sysmgr.h"
+#include "softcenter.h"
+#include "security.h"
 #include "theme.h"
 #include "mcui.h"
 #include "login.h"
@@ -56,10 +60,8 @@ static GtkCssProvider *g_theme = NULL;
 /* collapsible sidebar: closed = icon rail, open = icons + text */
 #define SIDE_OPEN_W   250
 #define SIDE_CLOSED_W  68
-#define SIDE_MARK_PX   22
+#define SIDE_MARK_PX   28
 static GtkWidget *g_side = NULL;        /* the sidebar box              */
-static GtkWidget *g_brandname = NULL;   /* app name beside the logo     */
-static GtkWidget *g_brandbox  = NULL;   /* logo + app name row          */
 static GtkWidget *g_brandmark = NULL;   /* the drawn app mark           */
 static GtkWidget *g_uchip = NULL;       /* bottom user row              */
 static GtkWidget *g_collapse_img = NULL;/* the toggle button's icon     */
@@ -126,11 +128,6 @@ sidebar_apply (gboolean collapsed)
     for (guint i = 0; i < g_navgroups->len; i++)
       gtk_widget_set_visible ((GtkWidget *) g_ptr_array_index (g_navgroups, i),
                               !collapsed);
-  if (g_brandname)
-    gtk_widget_set_visible (g_brandname, !collapsed);
-  if (g_brandbox)
-    gtk_widget_set_halign (g_brandbox,
-                           collapsed ? GTK_ALIGN_CENTER : GTK_ALIGN_START);
   if (g_uchip)
     gtk_widget_set_visible (g_uchip, !collapsed);
   if (g_collapse_img)
@@ -158,7 +155,7 @@ about_cb (GtkButton *b, gpointer user)
   (void) user;
   AdwAboutDialog *d =
     ADW_ABOUT_DIALOG (adw_about_dialog_new ());
-  adw_about_dialog_set_application_name (d, "ASUS Control Center");
+  adw_about_dialog_set_application_name (d, "ASUSCraft");
   adw_about_dialog_set_version (d, ACC_VERSION);
   adw_about_dialog_set_comments (d, acc_tr (ACC_T_DESC));
   adw_about_dialog_set_license_type (d, GTK_LICENSE_GPL_3_0);
@@ -199,8 +196,19 @@ acc_ui_nav_to (const gchar *page)
 {
   if (!page)
     return;
+
+  /* Old shortcuts ("battery", "gpu", "display", "performance", "system")
+   * resolve to a new top-level section and select the matching tab. */
+  const gchar *target = page;
+  const gchar *hub = acc_hubs_parent (page);
+  if (hub)
+    {
+      target = hub;
+      acc_hubs_select (page);
+    }
+
   if (g_stack)
-    gtk_stack_set_visible_child_name (GTK_STACK (g_stack), page);
+    gtk_stack_set_visible_child_name (GTK_STACK (g_stack), target);
   /* keep the sidebar selection in sync when a page is opened from a
    * dashboard/feature button instead of the nav list */
   if (g_nav)
@@ -211,7 +219,7 @@ acc_ui_nav_to (const gchar *page)
           if (!row)
             break;
           const gchar *p = (const gchar *) g_object_get_data (G_OBJECT (row), "page");
-          if (g_strcmp0 (p, page) == 0)
+          if (g_strcmp0 (p, target) == 0)
             {
               gtk_list_box_select_row (g_nav, row);
               break;
@@ -220,7 +228,7 @@ acc_ui_nav_to (const gchar *page)
     }
   /* the back arrow is only useful away from the dashboard */
   if (g_back)
-    gtk_widget_set_visible (g_back, g_strcmp0 (page, "home") != 0);
+    gtk_widget_set_visible (g_back, g_strcmp0 (target, "home") != 0);
 }
 
 static void
@@ -263,7 +271,7 @@ acc_theme_load (void)
 void
 acc_ui_toast (const gchar *msg)
 {
-  if (!g_toasts || !msg)
+  if (!g_toasts || !msg || !acc_pref_notifications ())
     return;
   AdwToast *t = adw_toast_new (msg);
   adw_toast_set_timeout (t, 3);
@@ -386,6 +394,15 @@ acc_ui_theme_toggle (void)
   acc_ui_boot (g_app);
 }
 
+/* rebuild the whole window in place (used when a preference that is applied
+ * at page-build time, e.g. the scrolling-effects toggle, changes) */
+void
+acc_ui_rebuild (void)
+{
+  acc_ui_destroy ();
+  acc_ui_boot (g_app);
+}
+
 void
 acc_ui_apply_theme (void)
 {
@@ -430,7 +447,7 @@ acc_ui_boot (GtkApplication *app)
   acc_ui_apply_theme ();
 
   g_root = GTK_WIDGET (adw_application_window_new (app));
-  gtk_window_set_title (GTK_WINDOW (g_root), "ASUS Control Center");
+  gtk_window_set_title (GTK_WINDOW (g_root), "ASUSCraft");
   gtk_window_set_default_size (GTK_WINDOW (g_root), 1180, 760);
 
   ui = g_new0 (AccUI, 1);
@@ -438,9 +455,32 @@ acc_ui_boot (GtkApplication *app)
   /* toast overlay wraps everything */
   g_toasts = adw_toast_overlay_new ();
 
-  /* toolbar with header: app name + laptop model centered, actions right */
+  /* toolbar with ASUSCraft at the top-left, laptop model centered, actions right */
   GtkWidget *tv = adw_toolbar_view_new ();
   GtkWidget *bar = gtk_header_bar_new ();
+
+  /* Primary app branding belongs in the window chrome, not the sidebar. */
+  GtkWidget *brand = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+  gtk_widget_set_valign (brand, GTK_ALIGN_CENTER);
+  {
+    GtkWidget *mark = mc_brand_mark_new (SIDE_MARK_PX);
+    g_brandmark = mark;
+    gtk_box_append (GTK_BOX (brand), mark);
+  }
+  {
+    GtkWidget *col = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_valign (col, GTK_ALIGN_CENTER);
+    GtkWidget *name = gtk_label_new ("ASUSCraft");
+    gtk_widget_add_css_class (name, "appbrand");
+    gtk_label_set_xalign (GTK_LABEL (name), 0.0);
+    GtkWidget *tag = gtk_label_new ("Intelligent ASUS Laptop Management");
+    gtk_widget_add_css_class (tag, "apptagline");
+    gtk_label_set_xalign (GTK_LABEL (tag), 0.0);
+    gtk_box_append (GTK_BOX (col), name);
+    gtk_box_append (GTK_BOX (col), tag);
+    gtk_box_append (GTK_BOX (brand), col);
+  }
+  gtk_header_bar_pack_start (GTK_HEADER_BAR (bar), brand);
 
   /* back arrow — always returns to the dashboard; hidden while on it */
   g_back = gtk_button_new ();
@@ -468,8 +508,7 @@ acc_ui_boot (GtkApplication *app)
   g_signal_connect (cbtn, "clicked", G_CALLBACK (sidebar_toggle_cb), NULL);
   gtk_header_bar_pack_start (GTK_HEADER_BAR (bar), cbtn);
 
-  /* the header carries the laptop model only: the app name lives in the
-   * sidebar next to the logo, so it is not repeated at the top */
+  /* Keep the laptop model centered between the brand and header actions. */
   GtkWidget *hbcol = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
   gtk_widget_set_halign (hbcol, GTK_ALIGN_CENTER);
   gtk_widget_set_valign (hbcol, GTK_ALIGN_CENTER);
@@ -577,58 +616,33 @@ acc_ui_boot (GtkApplication *app)
   g_side = side;
   gtk_widget_set_size_request (side, SIDE_OPEN_W, -1);
 
-  /* sidebar brand block, MyASUS style: logo mark with the app name beside
-   * it, top-left of the navigation rail (no personal greeting) */
-  GtkWidget *greet = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
-  g_brandbox = greet;
-  gtk_widget_set_halign (greet, GTK_ALIGN_START);
-  gtk_widget_set_margin_top (greet, 10);
-  gtk_widget_set_margin_bottom (greet, 14);
-  gtk_widget_set_margin_start (greet, 20);
-  gtk_widget_set_margin_end (greet, 20);
-  {
-    /* app mark: the dial, drawn by the UI kit at an exact pixel size
-     * (a bitmap GtkPicture kept its 256 px natural size and ignored the
-     * request — this one cannot) */
-    GtkWidget *mark = mc_brand_mark_new (SIDE_MARK_PX);
-    g_brandmark = mark;
-    gtk_box_append (GTK_BOX (greet), mark);
-  }
-  {
-    GtkWidget *name = lbl_x ("ASUS Control Center", "sidename", 0, FALSE);
-    g_brandname = name;
-    gtk_label_set_xalign (GTK_LABEL (name), 0.0f);
-    gtk_label_set_ellipsize (GTK_LABEL (name), PANGO_ELLIPSIZE_END);
-    gtk_label_set_max_width_chars (GTK_LABEL (name), 22);
-    gtk_widget_set_valign (name, GTK_ALIGN_CENTER);
-    gtk_box_append (GTK_BOX (greet), name);
-  }
-  gtk_box_append (GTK_BOX (side), greet);
-
   GtkListBox *nav = GTK_LIST_BOX (gtk_list_box_new ());
   g_nav = nav;
   gtk_widget_add_css_class (GTK_WIDGET (nav), "acnav");
   gtk_list_box_set_selection_mode (nav, GTK_SELECTION_SINGLE);
-  /* stable page identifiers (used by nav rows and the dashboard ">" buttons) */
-  struct { const gchar *icon; AccStr txt; const gchar *page; } navs[] = {
-    { "view-grid-symbolic",             ACC_T_NAV_HOME, "home"        },
-    { "battery-symbolic",               ACC_T_NAV_BAT,  "battery"     },
-    { "video-display-symbolic",         ACC_T_NAV_GPU,  "gpu"         },
-    { "display-brightness-symbolic",    ACC_T_NAV_DISP, "display"     },
-    { "applications-system-symbolic",   ACC_T_NAV_FANS, "performance" },
-    { "org.gnome.Settings-symbolic",    ACC_T_NAV_SYS,  "system"      },
-    { "emblem-system-symbolic",         ACC_T_NAV_SET,  "settings"    },
-    { "help-about-symbolic",            ACC_T_SUPPORT,  "support"     },
+  /* Streamlined navigation (Stage 2): Home stands alone, then grouped
+   * Device / System / General sections. `group` names the section header to
+   * emit before the row (-1 = no new header). Distinct labels and icons:
+   * the old build showed two identical "Service & repair" rows because
+   * System Manager and Software Center shared one string. */
+  struct { const gchar *icon; AccStr txt; const gchar *page; int group; } navs[] = {
+    { "view-grid-symbolic",                ACC_T_NAV_HOME,     "home",          -1              },
+    { "preferences-system-symbolic",       ACC_T_NAV_CUSTOM,   "customization", ACC_T_SEC_DEV   },
+    { "computer-symbolic",                 ACC_T_NAV_HW,       "hardware",      -1              },
+    { "applications-utilities-symbolic",   ACC_T_NAV_DIAG,     "diagnosis",     ACC_T_SEC_SYSTEM},
+    { "security-high-symbolic",            ACC_T_NAV_SECURITY, "security",      -1              },
+    { "applications-system-symbolic",      ACC_T_NAV_TOOLS,    "sysmgr",        -1              },
+    { "system-software-install-symbolic",  ACC_T_NAV_SOFTWARE, "softcenter",    -1              },
+    { "software-update-available-symbolic",ACC_T_NAV_UPD,      "support",       -1              },
+    { "emblem-system-symbolic",            ACC_T_NAV_SET,      "settings",      ACC_T_SEC_GENERAL},
   };
-  enum { NAV_DEV_END = 5 };   /* rows 0..5 belong to the "Device settings" group */
-  gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_DEV));
-  for (guint i = 0; i <= NAV_DEV_END; i++)
-    gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
-                                          navs[i].page));
-  gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_PREF));
-  for (guint i = NAV_DEV_END + 1; i < G_N_ELEMENTS (navs); i++)
-    gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
-                                          navs[i].page));
+  for (guint i = 0; i < G_N_ELEMENTS (navs); i++)
+    {
+      if (navs[i].group >= 0)
+        gtk_list_box_append (nav, mk_nav_group ((AccStr) navs[i].group));
+      gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
+                                            navs[i].page));
+    }
 
   GtkWidget *stack = gtk_stack_new ();
   g_stack = stack;
@@ -639,20 +653,22 @@ acc_ui_boot (GtkApplication *app)
   gtk_widget_add_css_class (stack, "pagepanel");
   gtk_widget_set_overflow (stack, GTK_OVERFLOW_HIDDEN);
   gtk_stack_add_named (GTK_STACK (stack), acc_home_build (ui), "home");
-  gtk_stack_add_named (GTK_STACK (stack), acc_page_bat (ui),  "battery");
-  gtk_stack_add_named (GTK_STACK (stack), acc_page_gpu (ui),  "gpu");
-  gtk_stack_add_named (GTK_STACK (stack), acc_page_disp (ui), "display");
-  gtk_stack_add_named (GTK_STACK (stack), acc_page_perf (ui), "performance");
-  gtk_stack_add_named (GTK_STACK (stack), acc_page_sys (ui),  "system");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_customization (ui),
+                       "customization");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_hardware (ui), "hardware");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_diagnosis (ui), "diagnosis");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_updates (ui), "support");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_security (ui), "security");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_sysmgr (ui), "sysmgr");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_softcenter (ui), "softcenter");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_settings (ui), "settings");
-  gtk_stack_add_named (GTK_STACK (stack), acc_page_support (ui), "support");
 
   /* restore the collapsed/expanded state from the last session */
   sidebar_load_pref ();
 
   g_signal_connect (nav, "row-selected", G_CALLBACK (on_nav), stack);
-  /* first *selectable* row is now index 1 (index 0 is the "Device settings" label) */
-  GtkListBoxRow *first = gtk_list_box_get_row_at_index (nav, 1);
+  /* Home is the first row now (no section header precedes it) */
+  GtkListBoxRow *first = gtk_list_box_get_row_at_index (nav, 0);
   if (first)
     gtk_list_box_select_row (nav, first);
 
@@ -692,8 +708,8 @@ acc_ui_boot (GtkApplication *app)
   GtkWidget *footbar = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
   gtk_widget_add_css_class (footbar, "footbar");
   {
-    GtkWidget *aw = lbl_x ("ASUS", "asusword", 0, FALSE);
-    GtkWidget *sl = lbl_x ("IN SEARCH OF INCREDIBLE", "slogan", 0, FALSE);
+    GtkWidget *aw = lbl_x ("ASUSCraft", "asusword", 0, FALSE);
+    GtkWidget *sl = lbl_x ("INTELLIGENT ASUS LAPTOP MANAGEMENT", "slogan", 0, FALSE);
     GtkWidget *fill = lbl_x (NULL, NULL, 0, FALSE);
     gtk_widget_set_hexpand (fill, TRUE);
     GtkWidget *lf = lbl_x (acc_tr (ACC_T_FOOT), "leaf", 1, FALSE);
@@ -736,9 +752,11 @@ void
 acc_ui_destroy (void)
 {
   acc_page_teardown ();
+  acc_hubs_teardown ();
+  acc_sysmgr_teardown ();
+  acc_softcenter_teardown ();
+  acc_security_teardown ();
   g_side = NULL;
-  g_brandname = NULL;
-  g_brandbox = NULL;
   g_brandmark = NULL;
   g_uchip = NULL;
   g_collapse_img = NULL;
@@ -959,6 +977,7 @@ acc_ui_refresh (void)
     }
 
   acc_page_refresh (ui);
+  acc_hubs_refresh ();
 
   /* system page strings (static, cheap) */
   gchar *s = sysinfo_os ();

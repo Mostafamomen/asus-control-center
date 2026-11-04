@@ -15,6 +15,7 @@
 #include "../control/ctl.h"
 #include "../control/asusd.h"
 #include "../control/gfx.h"
+#include "../control/muxreq.h"
 #include "../control/softdim.h"
 #include "../probe/probe.h"
 #include "../probe/devs.h"
@@ -47,11 +48,15 @@ static GtkWidget *f_gpu_pill;      /* live / queued status */
 static GtkWidget *f_gpu_spin;      /* busy indicator */
 static gint       s_gpu_jobs = 0;  /* in-flight MUX jobs (0 = idle)   */
 static GtkWidget *f_gpu_hybrid, *f_gpu_ult, *f_gpu_eco;
-static GtkWidget *f_gpu_eco_note;  /* why iGPU-only is (not) available */
+static GtkWidget *f_gpu_eco_note;  /* why Integrated is (not) available */
+static GtkWidget *f_gpu_pm;        /* NVIDIA runtime power state */
 static gboolean   s_gpu_can_hybrid = TRUE, s_gpu_can_ultimate = TRUE;
-static gboolean   s_gpu_can_eco = FALSE;
-static AccGfxMode s_gfx_mode = ACC_GFX_UNKNOWN; /* supergfxd live mode */
-static AccGfxMode s_gfx_pending = ACC_GFX_UNKNOWN; /* waits for logout */
+static gint       s_gpu_live = -1; /* live MUX value, -1 unknown */
+/* result of a request made before the last reboot, kept for this session
+ * once read (the record itself is cleared so it is reported only once) */
+static AccMuxReqState s_mux_result = ACC_MUXREQ_NONE;
+static gint       s_mux_result_mode = -1;
+static gchar     *s_mux_result_reason = NULL;
 /* display page */
 static GtkWidget *f_dsp_res, *f_dsp_slider, *f_dsp_pct;
 static GtkWidget *f_bl_slider, *f_bl_pct;
@@ -81,8 +86,6 @@ static GtkWidget *f_conn_wifi, *f_conn_wifi_sub, *f_conn_bt;
 /* settings page */
 static GtkWidget *f_helper;
 /* support page */
-static GtkWidget *f_diag_res;
-
 /* ------------------------------------------------ helpers ------------
  * Thin local aliases over the reusable MyASUS UI kit (ui/mcui.h) — the
  * library owns the widget construction and the CSS-class contract. */
@@ -449,11 +452,9 @@ acc_page_bat (AccUI *u)
 
 /* ------------------------------------------------ gpu page ----------- */
 
-/* Hybrid/Ultimate move the firmware MUX. iGPU only (Eco) has no firmware
- * switch here (no dgpu_disable attribute), so it goes through supergfxd,
- * which removes the dGPU from the PCI bus and finishes at logout. It is
- * offered only when supergfxd is running, lists Integrated, and the MUX
- * is in Hybrid. */
+/* Hybrid/Ultimate move the firmware MUX. Integrated (iGPU only) needs a
+ * firmware dGPU power switch that this firmware does not have, so its card
+ * is shown disabled with the reason (see control/gfx.h). */
 static void
 gpu_radios_sensitive (gboolean on)
 {
@@ -462,12 +463,11 @@ gpu_radios_sensitive (gboolean on)
   if (f_gpu_ult)
     gtk_widget_set_sensitive (f_gpu_ult, on && s_gpu_can_ultimate);
   if (f_gpu_eco)
-    gtk_widget_set_sensitive (f_gpu_eco, on && s_gpu_can_eco);
+    gtk_widget_set_sensitive (f_gpu_eco, FALSE);
 }
 
-/* job modes: the two MUX values, then the two supergfxd requests */
-enum { GPU_JOB_ULT = 0, GPU_JOB_HYBRID = 1,
-       GPU_JOB_GFX_INTEGRATED = 2, GPU_JOB_GFX_HYBRID = 3 };
+/* job modes are the two MUX values */
+enum { GPU_JOB_ULT = 0, GPU_JOB_HYBRID = 1 };
 
 typedef struct { gint mode; } GpuJob;
 
@@ -487,25 +487,18 @@ gpu_job_end (void)
   acc_page_refresh (NULL);
 }
 
-/* supergfxd answered (worker thread done): report, then unlock the page */
-static void
-gfx_done_cb (GObject *src, GAsyncResult *res, gpointer data)
+static const gchar *
+mux_name (gint mode)
 {
-  (void) src;
-  (void) data;
-  AccGfxAction act = ACC_GFX_ACT_NONE;
-  gchar *err = NULL;
-  if (acc_gfx_set_mode_finish (res, &act, &err))
-    acc_ui_toast (acc_tr (act == ACC_GFX_ACT_LOGOUT ? ACC_T_GFX_LOGOUT
-                          : act == ACC_GFX_ACT_REBOOT ? ACC_T_GFX_REBOOT
-                          : ACC_T_WROK));
-  else
-    {
-      g_printerr ("supergfxctl: %s\n", err ? err : "?");
-      acc_ui_toast (acc_tr (ACC_T_ERR_SERVICE));
-    }
-  g_free (err);
-  gpu_job_end ();
+  return acc_tr (mode == 0 ? ACC_T_GPU_ULT : ACC_T_GPU_HYBRID);
+}
+
+static void
+gpu_toast_fmt (AccStr fmt, gint mode)
+{
+  gchar *t = g_strdup_printf (acc_tr (fmt), mux_name (mode));
+  acc_ui_toast (t);
+  g_free (t);
 }
 
 static gboolean
@@ -514,57 +507,48 @@ gpu_apply_job (gpointer data)
   GpuJob *j = (GpuJob *) data;
   gint mode = j->mode;
   gchar *svc_err = NULL;
-  gboolean ok = FALSE;
-  gboolean queued = FALSE;
+  /* a new request replaces whatever the last boot reported */
+  s_mux_result = ACC_MUXREQ_NONE;
 
-  /* supergfxd request: no firmware write, the daemon finishes it at
-   * logout (or reboot). It runs in a worker thread because supergfxd can
-   * take seconds to answer; gfx_done_cb ends the job. */
-  if (mode == GPU_JOB_GFX_INTEGRATED || mode == GPU_JOB_GFX_HYBRID)
+  /* 1) the firmware write itself, through the whitelisted polkit helper.
+   *    The firmware applies it at the next boot; on this laptop it is the
+   *    path that actually switches. Exit 0 = confirmed (value or
+   *    pending_reboot), 5 = written but unconfirmed, 4 = refused. */
+  gboolean tried = acc_ctl_available () && !acc_ctl_helper_stale ();
+  gboolean ok = tried && acc_ctl_set_gpu_mux (mode);
+  gint c = tried ? acc_ctl_last_exit () : -1;
+
+  if (ok || c == 5)
     {
-      acc_gfx_set_mode_async (mode == GPU_JOB_GFX_INTEGRATED
-                              ? ACC_GFX_INTEGRATED : ACC_GFX_HYBRID,
-                              gfx_done_cb, NULL);
-      g_free (j);
-      return G_SOURCE_REMOVE;
+      /* do NOT also queue it in asusd: a second write of the same value
+       * at shutdown is refused (-EIO) and only produces an error */
+      acc_muxreq_record (mode, FALSE);
+      gpu_toast_fmt (ok ? ACC_T_MUX_ACCEPTED : ACC_T_MUX_UNCONFIRMED, mode);
+      goto out;
+    }
+  if (c == 127 || c == 126)              /* polkit prompt dismissed */
+    {
+      acc_ui_toast (acc_tr (ACC_T_ERR_AUTH));
+      goto out;
     }
 
-  /* 1) the firmware write itself — the same value MyASUS writes, through
-   *    the whitelisted polkit helper. */
-  if (acc_ctl_available () && !acc_ctl_helper_stale ())
-    ok = acc_ctl_set_gpu_mux (mode);
-
-  /* 2) When the EC refuses it, asusd can queue the value for shutdown:
-   *    asus-shutdown waits for the dGPU to go idle, unloads the NVIDIA
-   *    stack and only then writes the MUX. That is the one sequence this
-   *    firmware accepts, so use it instead of pretending the switch
-   *    failed. Never queue on battery — the EC refuses it there too. */
-  if (!ok)
+  /* 2) the firmware refused the write now. asusd can queue it for
+   *    shutdown, after the NVIDIA stack is unloaded. Never on battery:
+   *    the EC refuses it there too. */
+  if (c == 4 && !acc_dev_on_ac ())
     {
-      gint c = acc_ctl_last_exit ();
-      if (c == 127)                       /* polkit prompt dismissed */
-        {
-          acc_ui_toast (acc_tr (ACC_T_ERR_AUTH));
-          goto out;
-        }
-      if (!acc_dev_on_ac ())
-        {
-          acc_ui_toast (acc_tr (ACC_T_GPU_AC));
-          goto out;
-        }
-      if (acc_asusd_available () && acc_asusd_set_gpu_mux (mode, &svc_err))
-        {
-          ok = TRUE;
-          queued = TRUE;
-        }
+      acc_ui_toast (acc_tr (ACC_T_GPU_AC));
+      goto out;
+    }
+  if (c == 4 && acc_asusd_available ()
+      && acc_asusd_set_gpu_mux (mode, &svc_err))
+    {
+      acc_muxreq_record (mode, TRUE);
+      acc_ui_toast (acc_tr (ACC_T_MUX_QUEUE_WARN));
+      goto out;
     }
 
-  if (ok)
-    acc_ui_toast (acc_tr (queued ? ACC_T_GPU_QUEUED : ACC_T_WROK));
-  else if (svc_err)
-    acc_ui_toast (acc_tr (ACC_T_ERR_SERVICE));
-  else
-    acc_ui_toast (acc_tr (ACC_T_ERR_FW));
+  acc_ui_toast (acc_tr (svc_err ? ACC_T_ERR_SERVICE : ACC_T_ERR_FW));
 
 out:
   g_free (svc_err);
@@ -584,9 +568,11 @@ gpu_start_job (gint mode)
   g_timeout_add (80, gpu_apply_job, j);
 }
 
-/* asusd has no "clear the queue" call. Queueing the mode that is already
- * live makes the shutdown write a no-op, which is the same outcome and
- * keeps the UI honest: QueuedGpuValue == CurrentValue again. */
+/* Cancel a switch that waits for the restart.
+ * - asusd queue: asusd has no "clear" call; queueing the live mode makes
+ *   the shutdown write a no-op request and QueuedGpuValue == CurrentValue.
+ * - direct write: write the live mode back through the helper, which the
+ *   firmware accepts like any other MUX write. */
 static gboolean
 gpu_cancel_job (gpointer data)
 {
@@ -594,9 +580,14 @@ gpu_cancel_job (gpointer data)
   AsusdGpuState gs;
   gboolean ok = FALSE;
 
-  if (acc_asusd_gpu (&gs) && gs.current >= 0)
+  if (acc_asusd_gpu (&gs) && gs.queued >= 0 && gs.queued != gs.current
+      && gs.current >= 0)
     ok = acc_asusd_set_gpu_mux (gs.current, NULL);
+  else if (s_gpu_live == 0 || s_gpu_live == 1)
+    ok = acc_ctl_set_gpu_mux (s_gpu_live) || acc_ctl_last_exit () == 5;
 
+  if (ok)
+    acc_muxreq_clear ();
   acc_ui_toast (acc_tr (ok ? ACC_T_GPU_CANCEL_OK : ACC_T_ERR_SERVICE));
   gpu_job_end ();
   return G_SOURCE_REMOVE;
@@ -613,8 +604,7 @@ gpu_cancel_cb (GtkButton *b, gpointer data)
   g_timeout_add (80, gpu_cancel_job, NULL);
 }
 
-/* Ultimate rewires the internal panel and iGPU only removes the dGPU:
- * ask before either. data carries the job mode. */
+/* Ultimate rewires the internal panel: ask first. data = job mode. */
 static void
 gpu_confirm_cb (GObject *src, GAsyncResult *res, gpointer data)
 {
@@ -637,28 +627,9 @@ gpu_mode_cb (GtkCheckButton *b, gpointer data)
     return;
 
   gint mode = GPOINTER_TO_INT (data);
-  gboolean in_igpu = s_gfx_mode == ACC_GFX_INTEGRATED;
 
-  /* leaving iGPU only (or dropping a request for it that still waits for
-   * logout): supergfxd brings the dGPU back, no MUX write */
-  if (mode == GPU_JOB_HYBRID && s_gfx_pending == ACC_GFX_INTEGRATED)
-    in_igpu = TRUE;
-  if (mode == GPU_JOB_HYBRID && in_igpu)
-    {
-      gpu_start_job (GPU_JOB_GFX_HYBRID);
-      return;
-    }
-  /* Ultimate from iGPU only would wire the panel to a removed GPU */
-  if (mode == GPU_JOB_ULT && in_igpu)
-    {
-      acc_ui_toast (acc_tr (ACC_T_GFX_HYBRID_FIRST));
-      acc_page_refresh (NULL);
-      return;
-    }
-
-  /* an old helper writes the dead legacy node: say so, do not fail mute
-   * (MUX writes only; iGPU only goes through supergfxd, not the helper) */
-  if (mode <= GPU_JOB_HYBRID && acc_ctl_helper_stale ())
+  /* an old helper cannot report an accepted MUX write: say so */
+  if (acc_ctl_helper_stale ())
     {
       acc_ui_toast (acc_tr (ACC_T_HELPER_STALE));
       acc_page_refresh (NULL);
@@ -671,16 +642,14 @@ gpu_mode_cb (GtkCheckButton *b, gpointer data)
       return;
     }
 
-  gboolean eco = mode == GPU_JOB_GFX_INTEGRATED;
-  GtkAlertDialog *d = gtk_alert_dialog_new
-                        ("%s", acc_tr (eco ? ACC_T_GFX_T : ACC_T_GPU_SWITCH_T));
+  GtkAlertDialog *d = gtk_alert_dialog_new ("%s",
+                                            acc_tr (ACC_T_GPU_SWITCH_T));
   const gchar *btns[] = { acc_tr (ACC_T_SWITCH),
                           acc_tr (ACC_T_CANCEL), NULL };
   gtk_alert_dialog_set_buttons (d, btns);
   gtk_alert_dialog_set_cancel_button (d, 1);
   gtk_alert_dialog_set_default_button (d, 1);
-  gtk_alert_dialog_set_detail (d, acc_tr (eco ? ACC_T_GFX_B
-                                              : ACC_T_GPU_SWITCH_B));
+  gtk_alert_dialog_set_detail (d, acc_tr (ACC_T_GPU_SWITCH_B));
   gtk_alert_dialog_choose (d, GTK_WINDOW (acc_ui_root ()), NULL,
                            gpu_confirm_cb, GINT_TO_POINTER (mode));
   g_object_unref (d);
@@ -750,8 +719,7 @@ acc_page_gpu (AccUI *u)
                       GINT_TO_POINTER (1));
     g_signal_connect (f_gpu_ult,    "toggled", G_CALLBACK (gpu_mode_cb),
                       GINT_TO_POINTER (GPU_JOB_ULT));
-    g_signal_connect (f_gpu_eco,    "toggled", G_CALLBACK (gpu_mode_cb),
-                      GINT_TO_POINTER (GPU_JOB_GFX_INTEGRATED));
+    /* Integrated has no handler: it is never offered (see gfx.h) */
     GtkWidget *gr = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_set_homogeneous (GTK_BOX (gr), TRUE);
     gtk_widget_add_css_class (f_gpu_hybrid, "optcard");
@@ -770,11 +738,12 @@ acc_page_gpu (AccUI *u)
     g_free (muxf);
     gtk_box_append (GTK_BOX (ctl), gr);
 
-    /* the refresh fills in why iGPU only is (not) available */
-    f_gpu_eco_note = w_lbl (acc_tr (ACC_T_GFX_HINT), "foot", 0);
+    /* the refresh fills in why Integrated is (not) available */
+    f_gpu_eco_note = w_lbl (acc_tr (ACC_T_IGPU_WHY), "foot", 0);
     gtk_label_set_wrap (GTK_LABEL (f_gpu_eco_note), TRUE);
     gtk_label_set_width_chars (GTK_LABEL (f_gpu_eco_note), 30);
     gtk_box_append (GTK_BOX (ctl), f_gpu_eco_note);
+    gtk_box_append (GTK_BOX (ctl), w_row (acc_tr (ACC_T_DGPU_PM), &f_gpu_pm));
 
     /* CPU priority: exactly the same three firmware profiles as the
      * Power & Performance page, beside the MUX switch. One live state,
@@ -1587,6 +1556,75 @@ theme_sw_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
     acc_ui_theme_toggle ();   /* rebuilds the UI in the new skin */
 }
 
+static void
+autostart_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
+{
+  (void) ps;
+  (void) user;
+  if (s_sync)
+    return;
+  gchar *err = NULL;
+  gboolean on = gtk_switch_get_active (sw);
+  if (!acc_autostart_set (on, &err))
+    {
+      g_printerr ("autostart: %s\n", err ? err : "?");
+      acc_ui_toast (acc_tr (ACC_T_WRERR));
+      gtk_switch_set_active (sw, !on);
+    }
+  g_free (err);
+}
+
+static void
+notify_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
+{
+  (void) ps;
+  (void) user;
+  if (s_sync)
+    return;
+  acc_pref_set_notifications (gtk_switch_get_active (sw));
+}
+
+/* --- Security Center + scrolling-effect settings --- */
+static void
+anim_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
+{
+  (void) ps; (void) user;
+  if (s_sync)
+    return;
+  acc_pref_set_anim_enabled (gtk_switch_get_active (sw));
+  acc_ui_rebuild ();   /* applied at page-build time */
+}
+
+static void
+intensity_cb (GtkDropDown *dd, GParamSpec *ps, gpointer user)
+{
+  (void) ps; (void) user;
+  if (s_sync)
+    return;
+  const gchar *levels[] = { "subtle", "balanced", "enhanced" };
+  guint i = gtk_drop_down_get_selected (dd);
+  if (i < G_N_ELEMENTS (levels))
+    acc_pref_set_anim_intensity (levels[i]);
+}
+
+static void
+secnotify_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
+{
+  (void) ps; (void) user;
+  if (s_sync)
+    return;
+  acc_pref_set_security_notify (gtk_switch_get_active (sw));
+}
+
+static void
+scankeep_cb (GtkSpinButton *sb, gpointer user)
+{
+  (void) user;
+  if (s_sync)
+    return;
+  acc_pref_set_scan_keep (gtk_spin_button_get_value_as_int (sb));
+}
+
 GtkWidget *
 acc_page_settings (AccUI *u)
 {
@@ -1626,10 +1664,10 @@ acc_page_settings (AccUI *u)
     gtk_box_append (GTK_BOX (helper_row), f_helper);
     gtk_box_append (GTK_BOX (ctl), helper_row);
 
-    /* static build version — accurate, not read from the hardware */
+    /* build version from the Makefile (-DACC_VERSION), not a stale literal */
     GtkWidget *ver_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_append (GTK_BOX (ver_row), w_lbl (acc_tr (ACC_T_VER), "dim", 0));
-    gtk_box_append (GTK_BOX (ver_row), w_lbl ("0.3", "val", 0));
+    gtk_box_append (GTK_BOX (ver_row), w_lbl (ACC_VERSION, "val", 0));
     gtk_box_append (GTK_BOX (ctl), ver_row);
 
     /* language pill: EN <-> ع */
@@ -1657,6 +1695,100 @@ acc_page_settings (AccUI *u)
     g_signal_connect (tsw, "state-set", G_CALLBACK (theme_sw_cb), NULL);
     gtk_box_append (GTK_BOX (theme_row), tsw);
     gtk_box_append (GTK_BOX (ctl), theme_row);
+
+    /* launch at login: writes/removes a per-user XDG autostart entry */
+    GtkWidget *start_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *start_txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
+    gtk_box_append (GTK_BOX (start_txt),
+                    w_lbl (acc_tr (ACC_T_AUTOSTART), "dim", 0));
+    GtkWidget *start_sub = w_lbl (acc_tr (ACC_T_AUTOSTART_SUB), "foot", 0);
+    gtk_label_set_wrap (GTK_LABEL (start_sub), TRUE);
+    gtk_box_append (GTK_BOX (start_txt), start_sub);
+    gtk_widget_set_hexpand (start_txt, TRUE);
+    gtk_box_append (GTK_BOX (start_row), start_txt);
+    GtkWidget *start_sw = gtk_switch_new ();
+    gtk_switch_set_active (GTK_SWITCH (start_sw), acc_autostart_enabled ());
+    gtk_widget_set_valign (start_sw, GTK_ALIGN_CENTER);
+    g_signal_connect (start_sw, "state-set", G_CALLBACK (autostart_cb), NULL);
+    gtk_box_append (GTK_BOX (start_row), start_sw);
+    gtk_box_append (GTK_BOX (ctl), start_row);
+
+    /* notifications: persisted and honoured by the toast layer */
+    GtkWidget *notify_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *notify_txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
+    gtk_box_append (GTK_BOX (notify_txt),
+                    w_lbl (acc_tr (ACC_T_NOTIFY), "dim", 0));
+    GtkWidget *notify_sub = w_lbl (acc_tr (ACC_T_NOTIFY_SUB), "foot", 0);
+    gtk_label_set_wrap (GTK_LABEL (notify_sub), TRUE);
+    gtk_box_append (GTK_BOX (notify_txt), notify_sub);
+    gtk_widget_set_hexpand (notify_txt, TRUE);
+    gtk_box_append (GTK_BOX (notify_row), notify_txt);
+    GtkWidget *notify_sw = gtk_switch_new ();
+    gtk_switch_set_active (GTK_SWITCH (notify_sw), acc_pref_notifications ());
+    gtk_widget_set_valign (notify_sw, GTK_ALIGN_CENTER);
+    g_signal_connect (notify_sw, "state-set", G_CALLBACK (notify_cb), NULL);
+    gtk_box_append (GTK_BOX (notify_row), notify_sw);
+    gtk_box_append (GTK_BOX (ctl), notify_row);
+
+    /* security-center notifications */
+    GtkWidget *sn_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (sn_row), w_lbl (acc_tr (ACC_T_SET_SEC_NOTIFY), "dim", 0));
+    GtkWidget *sn_fill = w_lbl (NULL, NULL, 0);
+    gtk_widget_set_hexpand (sn_fill, TRUE);
+    gtk_box_append (GTK_BOX (sn_row), sn_fill);
+    GtkWidget *sn_sw = gtk_switch_new ();
+    gtk_switch_set_active (GTK_SWITCH (sn_sw), acc_pref_security_notify ());
+    gtk_widget_set_valign (sn_sw, GTK_ALIGN_CENTER);
+    g_signal_connect (sn_sw, "state-set", G_CALLBACK (secnotify_cb), NULL);
+    gtk_box_append (GTK_BOX (sn_row), sn_sw);
+    gtk_box_append (GTK_BOX (ctl), sn_row);
+
+    /* scrolling effects on/off */
+    GtkWidget *an_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *an_txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
+    gtk_box_append (GTK_BOX (an_txt), w_lbl (acc_tr (ACC_T_SET_ANIM), "dim", 0));
+    GtkWidget *an_sub = w_lbl (acc_tr (ACC_T_SET_ANIM_SUB), "foot", 0);
+    gtk_label_set_wrap (GTK_LABEL (an_sub), TRUE);
+    gtk_box_append (GTK_BOX (an_txt), an_sub);
+    gtk_widget_set_hexpand (an_txt, TRUE);
+    gtk_box_append (GTK_BOX (an_row), an_txt);
+    GtkWidget *an_sw = gtk_switch_new ();
+    gtk_switch_set_active (GTK_SWITCH (an_sw), acc_pref_anim_enabled ());
+    gtk_widget_set_valign (an_sw, GTK_ALIGN_CENTER);
+    g_signal_connect (an_sw, "state-set", G_CALLBACK (anim_cb), NULL);
+    gtk_box_append (GTK_BOX (an_row), an_sw);
+    gtk_box_append (GTK_BOX (ctl), an_row);
+
+    /* animation intensity */
+    GtkWidget *in_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (in_row), w_lbl (acc_tr (ACC_T_SET_INTENSITY), "dim", 0));
+    GtkWidget *in_fill = w_lbl (NULL, NULL, 0);
+    gtk_widget_set_hexpand (in_fill, TRUE);
+    gtk_box_append (GTK_BOX (in_row), in_fill);
+    const char *ilabels[] = { acc_tr (ACC_T_INTENSITY_SUBTLE),
+                              acc_tr (ACC_T_INTENSITY_BALANCED),
+                              acc_tr (ACC_T_INTENSITY_ENHANCED), NULL };
+    GtkWidget *in_dd = gtk_drop_down_new_from_strings (ilabels);
+    const gchar *cur = acc_pref_anim_intensity ();
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (in_dd),
+        g_strcmp0 (cur, "subtle") == 0 ? 0 : g_strcmp0 (cur, "enhanced") == 0 ? 2 : 1);
+    gtk_widget_set_valign (in_dd, GTK_ALIGN_CENTER);
+    g_signal_connect (in_dd, "notify::selected", G_CALLBACK (intensity_cb), NULL);
+    gtk_box_append (GTK_BOX (in_row), in_dd);
+    gtk_box_append (GTK_BOX (ctl), in_row);
+
+    /* scan-history retention */
+    GtkWidget *sk_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (sk_row), w_lbl (acc_tr (ACC_T_SET_SCAN_KEEP), "dim", 0));
+    GtkWidget *sk_fill = w_lbl (NULL, NULL, 0);
+    gtk_widget_set_hexpand (sk_fill, TRUE);
+    gtk_box_append (GTK_BOX (sk_row), sk_fill);
+    GtkWidget *sk_sb = gtk_spin_button_new_with_range (1, 200, 1);
+    gtk_spin_button_set_value (GTK_SPIN_BUTTON (sk_sb), acc_pref_scan_keep ());
+    gtk_widget_set_valign (sk_sb, GTK_ALIGN_CENTER);
+    g_signal_connect (sk_sb, "value-changed", G_CALLBACK (scankeep_cb), NULL);
+    gtk_box_append (GTK_BOX (sk_row), sk_sb);
+    gtk_box_append (GTK_BOX (ctl), sk_row);
 
     gtk_box_append (GTK_BOX (block), ctl);
   }
@@ -1699,75 +1831,47 @@ acc_page_settings (AccUI *u)
 }
 
 /* ------------------------------------------------ support page ------- */
-static void
-diag_cb (GtkButton *b, gpointer u)
-{
-  (void) b;
-  (void) u;
-  BatInfo bat;
-  HwInfo h;
-  LoadInfo ld;
-  battery_read (&bat);
-  hwmon_read (&h);
-  acc_load_read (&ld);
-  acc_load_read (&ld);   /* second sample so CPU% has a delta */
-
-  gboolean warn = FALSE;
-  GString *s = g_string_new (NULL);
-
-  g_string_append_printf (s, "%s ", acc_tr (ACC_T_NAV_BAT));
-  if (bat.wh_now > 0 && bat.wh_design > 0)
-    {
-      gdouble hp = bat.wh_now / bat.wh_design * 100.0;
-      g_string_append_printf (s, "%.0f%%", hp);
-      if (hp < 80.0)
-        warn = TRUE;
-    }
-  else
-    g_string_append (s, "—");
-
-  g_string_append_printf (s, "   ·   %s ", acc_tr (ACC_T_CPU));
-  if (h.t_cpu > 0)
-    {
-      g_string_append_printf (s, "%.0f°C", h.t_cpu);
-      if (h.t_cpu > 85.0)
-        warn = TRUE;
-    }
-  else
-    g_string_append (s, "—");
-
-  g_string_append_printf (s, "   ·   %s ", acc_tr (ACC_T_TILE_DISK));
-  if (ld.disk_pct >= 0)
-    {
-      g_string_append_printf (s, "%.0f%%", ld.disk_pct);
-      if (ld.disk_pct > 90.0)
-        warn = TRUE;
-    }
-  else
-    g_string_append (s, "—");
-
-  g_string_append_printf (s, "   ·   %s ", acc_tr (ACC_T_TILE_MEM));
-  if (ld.mem_pct >= 0)
-    {
-      g_string_append_printf (s, "%.0f%%", ld.mem_pct);
-      if (ld.mem_pct > 90.0)
-        warn = TRUE;
-    }
-  else
-    g_string_append (s, "—");
-
-  g_string_append (s, "\n");
-  g_string_append (s, acc_tr (warn ? ACC_T_DIAG_WARN : ACC_T_DIAG_OK));
-  gtk_label_set_text (GTK_LABEL (f_diag_res), s->str);
-  g_string_free (s, TRUE);
-}
-
 GtkWidget *
 acc_page_support (AccUI *u)
 {
   (void) u;
-  GtkWidget *c = w_picard (acc_tr (ACC_T_SUPPORT));
+  GtkWidget *c = w_picard (acc_tr (ACC_T_NAV_UPD));
   GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
+
+  /* software status: facts read from this install, never invented */
+  {
+    GtkWidget *status = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
+
+    GtkWidget *ver = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (ver), w_lbl (acc_tr (ACC_T_UPD_APP), "dim", 0));
+    gtk_box_append (GTK_BOX (ver), w_lbl (ACC_VERSION, "val", 1));
+    gtk_box_append (GTK_BOX (status), ver);
+
+    GtkWidget *helper = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (helper),
+                    w_lbl (acc_tr (ACC_T_SERVICE_HELPER), "dim", 0));
+    gtk_box_append (GTK_BOX (helper),
+                    w_lbl (acc_tr (acc_ctl_available () ? ACC_T_INSTALLED
+                                                       : ACC_T_MISSING),
+                           "val", 1));
+    gtk_box_append (GTK_BOX (status), helper);
+
+    GtkWidget *svc = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (svc), w_lbl ("asusd", "dim", 0));
+    gtk_box_append (GTK_BOX (svc),
+                    w_lbl (acc_tr (acc_asusd_available () ? ACC_T_RUNNING
+                                                         : ACC_T_STOPPED),
+                           "val", 1));
+    gtk_box_append (GTK_BOX (status), svc);
+
+    GtkWidget *guide = w_lbl (acc_tr (ACC_T_UPD_GUIDE), "cardtitle", 0);
+    gtk_box_append (GTK_BOX (status), guide);
+    GtkWidget *body = w_lbl (acc_tr (ACC_T_UPD_GUIDE_BODY), "foot", 0);
+    gtk_label_set_wrap (GTK_LABEL (body), TRUE);
+    gtk_box_append (GTK_BOX (status), body);
+    gtk_box_append (GTK_BOX (li), status);
+    gtk_box_append (GTK_BOX (li), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
+  }
 
   /* warranty — honestly handled on ASUS's own site */
   {
@@ -1825,26 +1929,25 @@ acc_page_support (AccUI *u)
     gtk_box_append (GTK_BOX (li), row);
   }
 
-  /* diagnostics — real sensor readings, run on demand */
+  /* diagnosis now lives in its own top-level section */
   {
     GtkWidget *ctl;
     GtkWidget *row = w_feat ("applications-utilities-symbolic",
                              acc_tr (ACC_T_DIAG_TITLE),
                              acc_tr (ACC_T_DIAG_SUB), &ctl);
-    GtkWidget *run = gtk_button_new_with_label (acc_tr (ACC_T_RUN_DIAG));
-    gtk_widget_add_css_class (run, "primarybtn");
-    gtk_widget_set_halign (run, GTK_ALIGN_END);
-    g_signal_connect (run, "clicked", G_CALLBACK (diag_cb), NULL);
-    gtk_box_append (GTK_BOX (ctl), run);
-    f_diag_res = w_lbl ("—", "dim", 0);
-    gtk_label_set_wrap (GTK_LABEL (f_diag_res), TRUE);
-    gtk_widget_set_hexpand (f_diag_res, TRUE);
-    gtk_box_append (GTK_BOX (ctl), f_diag_res);
+    GtkWidget *go = gtk_button_new_with_label (acc_tr (ACC_T_NAV_DIAG));
+    gtk_widget_add_css_class (go, "primarybtn");
+    gtk_widget_set_halign (go, GTK_ALIGN_END);
+    g_signal_connect (go, "clicked",
+                      G_CALLBACK (+[] (GtkButton *, gpointer) {
+                        acc_ui_nav_to ("diagnosis");
+                      }), NULL);
+    gtk_box_append (GTK_BOX (ctl), go);
     gtk_box_append (GTK_BOX (li), row);
   }
 
   gtk_box_append (GTK_BOX (c), li);
-  return w_page_titled (c, ACC_T_SUPPORT);
+  return w_page_titled (c, ACC_T_NAV_UPD);
 }
 
 void
@@ -1873,11 +1976,12 @@ acc_page_refresh (AccUI *u)
       gtk_label_set_text (GTK_LABEL (f_bat_whf), b.wh_design > 0 ? buf : "—");
       g_snprintf (buf, sizeof buf, "%d", b.cycle_count);
       gtk_label_set_text (GTK_LABEL (f_bat_cyc), b.cycle_count >= 0 ? buf : "—");
-      /* honest health number: needs both readings to be meaningful */
+      /* honest health number: full-charge capacity vs design capacity.
+       * wh_now is the current charge and must never be used here. */
       gtk_label_set_text (GTK_LABEL (f_bat_health),
-                          (b.wh_now > 0 && b.wh_design > 0)
+                          (b.wh_full > 0 && b.wh_design > 0)
                           ? (g_snprintf (buf, sizeof buf, "%.0f%%",
-                                         b.wh_now / b.wh_design * 100.0), buf)
+                                         b.wh_full / b.wh_design * 100.0), buf)
                           : "—");
 
       gchar *thrf = acc_dev_charge_limit_file ();
@@ -1976,27 +2080,35 @@ acc_page_refresh (AccUI *u)
       AsusdGpuState gs;
       gboolean has_gs = acc_asusd_gpu (&gs);
 
-      AccGfxState gx;
-      gboolean has_gx = acc_gfx_state (&gx);
-      s_gfx_mode = has_gx ? gx.mode : ACC_GFX_UNKNOWN;
-      s_gfx_pending = has_gx ? gx.pending : ACC_GFX_UNKNOWN;
-      gboolean igpu = s_gfx_mode == ACC_GFX_INTEGRATED;
+      s_gpu_live = mux;
 
-      /* iGPU only needs the daemon, its Integrated mode, and the panel on
-       * the iGPU (MUX hybrid); while active it stays selectable */
-      s_gpu_can_eco = has_gx && gx.can_integrated && (mux != 0 || igpu);
+      AccGfxState gx;
+      acc_gfx_state (&gx);
       if (f_gpu_eco_note)
-        gtk_label_set_text (GTK_LABEL (f_gpu_eco_note),
-                            acc_tr (!gx.known ? ACC_T_GFX_HINT
-                                    : !gx.installed ? ACC_T_GFX_NEED
-                                    : !has_gx ? ACC_T_GFX_START
-                                    : !gx.can_integrated ? ACC_T_GPU_ECO_WHY
-                                    : mux == 0 && !igpu ? ACC_T_GFX_MUX
-                                    : ACC_T_GFX_HINT));
+        {
+          GString *why = g_string_new (acc_tr (gx.has_dgpu_disable
+                                               ? ACC_T_IGPU_FW_UNVERIFIED
+                                               : ACC_T_IGPU_WHY));
+          if (gx.supergfxd_running)
+            g_string_append_printf (why, "\n%s", acc_tr (ACC_T_IGPU_SGFX));
+          gtk_label_set_text (GTK_LABEL (f_gpu_eco_note), why->str);
+          g_string_free (why, TRUE);
+        }
+      if (f_gpu_pm)
+        {
+          gchar *pm = NULL;
+          if (gx.pm == ACC_DGPU_PM_SUSPENDED)
+            pm = g_strdup (acc_tr (ACC_T_DGPU_SLEEP));
+          else if (gx.pm == ACC_DGPU_PM_ACTIVE && gx.holders[0])
+            pm = g_strdup_printf (acc_tr (ACC_T_DGPU_AWAKE_BY), gx.holders);
+          else if (gx.pm == ACC_DGPU_PM_ACTIVE)
+            pm = g_strdup (acc_tr (ACC_T_DGPU_AWAKE));
+          gtk_label_set_text (GTK_LABEL (f_gpu_pm), pm ? pm : "—");
+          g_free (pm);
+        }
 
       gtk_label_set_text (GTK_LABEL (f_gpu_now),
-                          igpu ? acc_tr (ACC_T_GPU_ECO)
-                          : mux == 0 ? acc_tr (ACC_T_GPU_ULT)
+                          mux == 0 ? acc_tr (ACC_T_GPU_ULT)
                           : mux == 1 ? acc_tr (ACC_T_GPU_HYBRID)
                           : "—");
 
@@ -2007,11 +2119,9 @@ acc_page_refresh (AccUI *u)
           s_gpu_can_ultimate = gs.allow_ultimate;
         }
 
-      /* The radio always follows the LIVE firmware value: a queued change
+      /* The radio always follows the LIVE firmware value: a pending change
        * is a request, not a state, and the note below spells it out. */
-      if (igpu)
-        gtk_check_button_set_active (GTK_CHECK_BUTTON (f_gpu_eco), TRUE);
-      else if (mux == 0)
+      if (mux == 0)
         gtk_check_button_set_active (GTK_CHECK_BUTTON (f_gpu_ult), TRUE);
       else if (mux == 1)
         gtk_check_button_set_active (GTK_CHECK_BUTTON (f_gpu_hybrid), TRUE);
@@ -2026,17 +2136,29 @@ acc_page_refresh (AccUI *u)
       if (f_gpu_pill)
         {
           gtk_label_set_text (GTK_LABEL (f_gpu_pill),
-                              mux >= 0 || igpu ? acc_tr (ACC_T_GPU_LIVE) : "");
-          gtk_widget_set_visible (f_gpu_pill, mux >= 0 || igpu);
+                              mux >= 0 ? acc_tr (ACC_T_GPU_LIVE) : "");
+          gtk_widget_set_visible (f_gpu_pill, mux >= 0);
         }
+
+      /* a request from an earlier boot: verified or failed, said once */
+      AccMuxReq rq;
+      acc_muxreq_check (mux, &rq);
+      if (rq.state == ACC_MUXREQ_VERIFIED || rq.state == ACC_MUXREQ_FAILED)
+        {
+          s_mux_result = rq.state;
+          s_mux_result_mode = rq.mode;
+          g_free (s_mux_result_reason);
+          s_mux_result_reason = g_strdup (rq.reason);
+          acc_muxreq_clear ();
+        }
+      gboolean rpend = rq.state == ACC_MUXREQ_PENDING && rq.mode != mux;
+      g_free (rq.reason);
 
       if (f_gpu_notice)
         {
           gboolean stale = acc_ctl_helper_stale ();
           gboolean pend = acc_dev_pending_reboot ();
           gboolean qpend = has_gs && gs.queued >= 0 && gs.queued != gs.current;
-          gboolean gpend = has_gx && (gx.pending == ACC_GFX_INTEGRATED
-                                      || gx.pending == ACC_GFX_HYBRID);
           const gchar *kind = NULL;
           gchar *head = NULL, *body = NULL;
 
@@ -2049,9 +2171,7 @@ acc_page_refresh (AccUI *u)
             {
               /* say which mode is queued: the queue is a request, not a
                * live state, and the user must know what will be applied */
-              head = g_strdup_printf ("%s · %s",
-                                      acc_tr (gs.queued == 0 ? ACC_T_GPU_ULT
-                                                             : ACC_T_GPU_HYBRID),
+              head = g_strdup_printf ("%s · %s", mux_name (gs.queued),
                                       acc_tr (ACC_T_GPU_NEXT));
               if (gs.shutdown_ready)
                 {
@@ -2068,22 +2188,46 @@ acc_page_refresh (AccUI *u)
                   body = g_strdup (acc_tr (ACC_T_GPU_NO_HOOK));
                 }
             }
-          else if (gpend)
+          else if (rpend)
             {
-              /* supergfxd accepted a request that finishes at logout */
               kind = "info";
-              head = g_strdup_printf ("%s · %s",
-                                      acc_tr (gx.pending == ACC_GFX_INTEGRATED
-                                              ? ACC_T_GPU_ECO
-                                              : ACC_T_GPU_HYBRID),
-                                      acc_tr (gx.action == ACC_GFX_ACT_REBOOT
-                                              ? ACC_T_GPU_NEXT
-                                              : ACC_T_GFX_AFTER_LOGOUT));
+              head = g_strdup_printf ("%s · %s", mux_name (rq.mode),
+                                      acc_tr (ACC_T_GPU_AFTER));
+              body = g_strdup (acc_tr (ACC_T_MUX_RESTART_STEP));
+            }
+          else if (s_mux_result == ACC_MUXREQ_VERIFIED)
+            {
+              kind = "info";
+              head = g_strdup_printf (acc_tr (ACC_T_MUX_VERIFIED),
+                                      mux_name (s_mux_result_mode));
+            }
+          else if (s_mux_result == ACC_MUXREQ_FAILED)
+            {
+              kind = "warn";
+              head = g_strdup_printf (acc_tr (ACC_T_MUX_FAILED),
+                                      mux_name (s_mux_result_mode),
+                                      mux_name (mux));
+              if (s_mux_result_reason)
+                body = g_strdup_printf (acc_tr (ACC_T_MUX_REASON),
+                                        s_mux_result_reason);
             }
           else if (pend)
             {
               kind = "info";
               head = g_strdup (acc_tr (ACC_T_GPU_PENDING));
+            }
+
+          /* the supergfxd leftover is a separate, standing problem */
+          if (gx.supergfx_leftover)
+            {
+              gchar *b2 = body ? g_strdup_printf ("%s\n\n%s", body,
+                                                  acc_tr (ACC_T_IGPU_LEFTOVER))
+                               : g_strdup (acc_tr (ACC_T_IGPU_LEFTOVER));
+              g_free (body);
+              body = b2;
+              kind = "warn";
+              if (!head)
+                head = g_strdup (acc_tr (ACC_T_GPU_MODE));
             }
 
           gtk_widget_remove_css_class (f_gpu_notice, "info");
@@ -2093,7 +2237,7 @@ acc_page_refresh (AccUI *u)
           gtk_label_set_text (GTK_LABEL (f_gpu_notice_t), head ? head : "");
           gtk_label_set_text (GTK_LABEL (f_gpu_notice_b), body ? body : "");
           gtk_widget_set_visible (f_gpu_notice_b, body != NULL);
-          gtk_widget_set_visible (f_gpu_cancel, qpend);
+          gtk_widget_set_visible (f_gpu_cancel, qpend || rpend);
           gtk_widget_set_visible (f_gpu_notice, head != NULL);
           g_free (head);
           g_free (body);
@@ -2245,5 +2389,4 @@ acc_page_teardown (void)
   f_sys_os = f_sys_cpu = f_sys_ram = f_sys_ssd = f_sys_bios = f_sys_kernel = NULL;
   f_conn_wifi = f_conn_wifi_sub = f_conn_bt = NULL;
   f_helper = NULL;
-  f_diag_res = NULL;
 }
