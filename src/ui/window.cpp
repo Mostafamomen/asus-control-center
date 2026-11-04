@@ -8,6 +8,7 @@
 #include "sysmgr.h"
 #include "softcenter.h"
 #include "pcmanager.h"
+#include "quickactions.h"
 #include "theme.h"
 #include "mcui.h"
 #include "login.h"
@@ -617,21 +618,27 @@ acc_ui_boot (GtkApplication *app)
     { "emblem-system-symbolic",           ACC_T_NAV_CUSTOM, "customization" },
     { "computer-symbolic",                ACC_T_NAV_HW,     "hardware"      },
     { "applications-utilities-symbolic",  ACC_T_NAV_DIAG,   "diagnosis"     },
-    { "software-update-available-symbolic", ACC_T_NAV_UPD,  "support"       },
+    { "view-refresh-symbolic",            ACC_T_NAV_HOME,   "quickactions"  },
     { "applications-system-symbolic",     ACC_T_SERVICE,   "sysmgr"        },
     { "application-x-executable-symbolic", ACC_T_SERVICE,  "softcenter"    },
     { "computer-symbolic",                ACC_T_SERVICE,   "pcmanager"     },
+    { "software-update-available-symbolic", ACC_T_NAV_UPD,  "support"       },
     { "emblem-system-symbolic",           ACC_T_NAV_SET,    "settings"      },
   };
-  enum { NAV_DEV_END = 4 };   /* rows 0..4 belong to the "Device" group */
-  gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_DEV));
-  for (guint i = 0; i <= NAV_DEV_END; i++)
+  /* Hardware group: rows 0..4 */
+  gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_HW));
+  for (guint i = 0; i <= 4; i++)
     gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
                                           navs[i].page));
+  /* Software group: rows 5..8 */
+  gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_SW));
+  for (guint i = 5; i <= 8; i++)
+    gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
+                                          navs[i].page));
+  /* Settings group: row 9 */
   gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_PREF));
-  for (guint i = NAV_DEV_END + 1; i < G_N_ELEMENTS (navs); i++)
-    gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
-                                          navs[i].page));
+  gtk_list_box_append (nav, mk_nav_row (navs[9].icon, navs[9].txt,
+                                        navs[9].page));
 
   GtkWidget *stack = gtk_stack_new ();
   g_stack = stack;

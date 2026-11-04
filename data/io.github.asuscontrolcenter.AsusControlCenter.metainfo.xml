@@ -69,6 +69,17 @@
     <keyword>oled</keyword>
   </keywords>
   <releases>
+    <release version="10.2" date="2026-11-04">
+      <description>
+        <p>Cross-desktop-environment support and new Quick Actions.</p>
+        <ul>
+          <li>GNOME 51 and KDE Plasma 6.8 compatibility</li>
+          <li>Night-light toggle works on both GNOME (settings-daemon DBus) and KDE (kwinrc + KWin DBus)</li>
+          <li>Touchpad enable/disable works on GNOME (gsettings) and KDE/X11/Wayland (xinput fallback)</li>
+          <li>Desktop-environment probe cached at startup; greys out unsupported controls automatically</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-11-03">
       <description>
         <p>First stable release.</p>

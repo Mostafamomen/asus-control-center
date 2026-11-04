@@ -1,7 +1,7 @@
 # ASUSCraft
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-VERSION  ?= 1.0.0
+VERSION  ?= 10.2
 CXX      ?= g++
 CXXFLAGS ?= -O2 -g -Wall -Wextra
 CXXFLAGS += -std=gnu++20
@@ -22,8 +22,10 @@ SRCS = src/main.cpp \
        src/probe/probe.cpp src/probe/battery.cpp src/probe/dmi.cpp \
        src/probe/hwmon.cpp src/probe/gpu.cpp src/probe/display.cpp \
        src/probe/sysinfo.cpp src/probe/load.cpp src/probe/devs.cpp \
+       src/probe/desktop.cpp \
        src/control/brightness.cpp src/control/ctl.cpp src/control/asusd.cpp \
        src/control/gfx.cpp src/control/muxreq.cpp src/control/softdim.cpp src/control/backlight.cpp \
+       src/control/nightlight.cpp src/control/touchpadctl.cpp \
        src/user/user.cpp \
        src/ui/window.cpp src/ui/home.cpp src/ui/theme.cpp src/ui/ring.cpp \
        src/ui/spark.cpp src/ui/pages.cpp src/ui/hubs.cpp src/ui/sysdiag.cpp \

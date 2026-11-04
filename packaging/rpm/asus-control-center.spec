@@ -1,5 +1,5 @@
 Name:           asus-control-center
-Version:        1.0.0
+Version:        10.2
 Release:        1%{?dist}
 Summary:        Battery, performance, GPU and display controls for ASUS laptops
 

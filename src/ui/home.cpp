@@ -11,6 +11,7 @@
 #include "specs.h"
 #include "../i18n/i18n.h"
 #include "../control/brightness.h"
+#include "../control/nightlight.h"
 #include "../control/ctl.h"
 #include "../probe/probe.h"
 #include "../probe/load.h"
@@ -286,23 +287,6 @@ on_oled_changed (GtkRange *rng, gpointer user)
   acc_brightness_set (gtk_range_get_value (rng));
 }
 
-/* read a GSettings boolean without aborting when the schema is absent */
-static gboolean
-gs_bool_safe (const gchar *schema, const gchar *key, gboolean def)
-{
-  GSettingsSchemaSource *src = g_settings_schema_source_get_default ();
-  if (!src)
-    return def;
-  GSettingsSchema *sch = g_settings_schema_source_lookup (src, schema, TRUE);
-  if (!sch)
-    return def;
-  GSettings *st = g_settings_new_full (sch, NULL, NULL);
-  g_settings_schema_unref (sch);
-  gboolean v = g_settings_get_boolean (st, key);
-  g_object_unref (st);
-  return v;
-}
-
 /* one thin divider between the stacked rows */
 static GtkWidget *
 hsep (void)
@@ -362,11 +346,10 @@ card_oled (AccUI *u)
 
   gtk_box_append (GTK_BOX (li), hsep ());
 
-  /* 3. eye protection — real night-light state, never a fixed "active" */
+  /* 3. eye protection — real night-light/Night Color state */
   {
     GtkWidget *row = kv_row (acc_tr (ACC_T_OLED_EYE), NULL);
-    gboolean eye = gs_bool_safe ("org.gnome.settings-daemon.plugins.color",
-                                 "night-light-enabled", FALSE);
+    gboolean eye = acc_nightlight_get ();
     GtkWidget *pill = lbl (acc_tr (eye ? ACC_T_ON : ACC_T_OFF),
                            eye ? "pill on" : "pill off", 1);
     gtk_box_append (GTK_BOX (row), pill);

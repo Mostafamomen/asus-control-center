@@ -157,7 +157,8 @@ acc_autostart_set (gboolean on, gchar **err)
     "Exec=%s\n"
     "Icon=io.github.asuscontrolcenter.AsusControlCenter\n"
     "Terminal=false\n"
-    "X-GNOME-Autostart-enabled=true\n",
+    "X-GNOME-Autostart-enabled=true\n"
+    "X-KDE-autostart-enabled=true\n",
     quoted);
   GError *e = NULL;
   ok = g_file_set_contents (p, body, -1, &e);

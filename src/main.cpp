@@ -17,7 +17,9 @@
 #include "control/gfx.h"
 #include "control/muxreq.h"
 #include "control/softdim.h"
+#include "control/nightlight.h"
 #include "probe/probe.h"
+#include "probe/desktop.h"
 #include "probe/devs.h"
 #include "probe/battery.h"
 #include "probe/dmi.h"
@@ -400,14 +402,9 @@ self_test (void)
     g_free (d2);
   }
   {
-    GSettingsSchemaSource *ss = g_settings_schema_source_get_default ();
-    GSettingsSchema *sch = ss
-      ? g_settings_schema_source_lookup
-          (ss, "org.gnome.settings-daemon.plugins.color", TRUE) : NULL;
-    r_cap (sch != NULL, "Night light",
-           sch ? "GSettings available" : "schema not installed");
-    if (sch)
-      g_settings_schema_unref (sch);
+    gboolean nl = acc_nightlight_available ();
+    r_cap (nl, "Night light / Night color",
+           nl ? "backend available" : "no supported backend on this DE");
   }
   {
     gboolean ok = g_file_test ("/usr/libexec/asus-control-center/acc-helper",

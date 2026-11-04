@@ -6,6 +6,7 @@
 #include "mcui.h"
 #include "window.h"
 #include "../i18n/i18n.h"
+#include "../probe/desktop.h"
 #include <adwaita.h>
 #include <glib.h>
 #include <string.h>
@@ -302,10 +303,10 @@ static gboolean
 ma_apply (gpointer data)
 {
   MaMsg *m = (MaMsg *) data;
-  if (m->gen == ma_gen && ma_flat_box && ma_ext_box)
+  if (m->gen == ma_gen && ma_flat_box)
     {
       ma_clear (ma_flat_box);
-      ma_clear (ma_ext_box);
+      if (ma_ext_box) ma_clear (ma_ext_box);
       int nflat = 0, next = 0;
 
       /* Flatpak: tab-separated application<TAB>name<TAB>version<TAB>size */
@@ -342,29 +343,32 @@ ma_apply (gpointer data)
           mc_label (MT ("No user Flatpak applications, or Flatpak is unavailable.",
                         "لا توجد تطبيقات Flatpak للمستخدم أو أن Flatpak غير متاح."), "dim", 0));
 
-      /* Extensions */
-      for (int pass = 0; pass < 2; pass++)
+      /* Extensions — GNOME only */
+      if (ma_ext_box)
         {
-          const gchar *src = pass == 0 ? m->ext_on : m->ext_off;
-          if (!src) continue;
-          gchar **lines = g_strsplit (src, "\n", -1);
-          for (gchar **p = lines; *p; p++)
+          for (int pass = 0; pass < 2; pass++)
             {
-              gchar *uuid = g_strstrip (*p);
-              if (!*uuid) continue;
-              MaAction *a = g_new0 (MaAction, 1);
-              a->id = g_strdup (uuid); a->kind = pass == 0 ? 2 : 1;
-              gtk_box_append (GTK_BOX (ma_ext_box),
-                ma_row (uuid, pass == 0 ? MT ("Enabled", "مفعّلة") : MT ("Disabled", "معطّلة"),
-                        pass == 0 ? MT ("Disable", "تعطيل") : MT ("Enable", "تفعيل"),
-                        "actionbtn", G_CALLBACK (ma_toggle_cb), a));
-              next++;
+              const gchar *src = pass == 0 ? m->ext_on : m->ext_off;
+              if (!src) continue;
+              gchar **lines = g_strsplit (src, "\n", -1);
+              for (gchar **p = lines; *p; p++)
+                {
+                  gchar *uuid = g_strstrip (*p);
+                  if (!*uuid) continue;
+                  MaAction *a = g_new0 (MaAction, 1);
+                  a->id = g_strdup (uuid); a->kind = pass == 0 ? 2 : 1;
+                  gtk_box_append (GTK_BOX (ma_ext_box),
+                    ma_row (uuid, pass == 0 ? MT ("Enabled", "مفعّلة") : MT ("Disabled", "معطّلة"),
+                            pass == 0 ? MT ("Disable", "تعطيل") : MT ("Enable", "تفعيل"),
+                            "actionbtn", G_CALLBACK (ma_toggle_cb), a));
+                  next++;
+                }
+              g_strfreev (lines);
             }
-          g_strfreev (lines);
+          if (!next)
+            gtk_box_append (GTK_BOX (ma_ext_box),
+              mc_label (MT ("No GNOME Shell extensions found.", "لا توجد إضافات لـ GNOME Shell."), "dim", 0));
         }
-      if (!next)
-        gtk_box_append (GTK_BOX (ma_ext_box),
-          mc_label (MT ("No GNOME Shell extensions found.", "لا توجد إضافات لـ GNOME Shell."), "dim", 0));
 
       if (ma_status)
         gtk_label_set_text (GTK_LABEL (ma_status), "");
@@ -381,8 +385,11 @@ ma_worker (gpointer data)
   m->gen = gen;
   m->flat = run_cmd ({ "flatpak", "list", "--app",
                        "--columns=application,name,version,size", NULL });
-  m->ext_on  = run_cmd ({ "gnome-extensions", "list", "--enabled", NULL });
-  m->ext_off = run_cmd ({ "gnome-extensions", "list", "--disabled", NULL });
+  if (acc_desktop_is_gnome ())
+    {
+      m->ext_on  = run_cmd ({ "gnome-extensions", "list", "--enabled", NULL });
+      m->ext_off = run_cmd ({ "gnome-extensions", "list", "--disabled", NULL });
+    }
   g_idle_add (ma_apply, m);
   return NULL;
 }
@@ -417,8 +424,8 @@ ma_section (void)
 {
   GtkWidget *panel = mc_panel (MT ("Manage Apps", "إدارة التطبيقات"));
   GtkWidget *sub = mc_label (
-    MT ("Remove Flatpak apps and turn GNOME extensions on or off. Removals are confirmed first and run only for your user — nothing here touches system files.",
-        "أزل تطبيقات Flatpak وفعّل أو عطّل إضافات GNOME. يُطلب تأكيد الحذف ويعمل لمستخدمك فقط دون المساس بملفات النظام."),
+    MT ("Remove Flatpak apps and manage desktop extensions. Removals are confirmed first and run only for your user — nothing here touches system files.",
+        "أزل تطبيقات Flatpak وأدِر إضافات سطح المكتب. يُطلب تأكيد الحذف ويعمل لمستخدمك فقط دون المساس بملفات النظام."),
     "pagesub", 0);
   gtk_label_set_wrap (GTK_LABEL (sub), TRUE);
   gtk_box_append (GTK_BOX (panel), sub);
@@ -441,9 +448,17 @@ ma_section (void)
   ma_flat_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
   gtk_box_append (GTK_BOX (panel), ma_flat_box);
 
-  gtk_box_append (GTK_BOX (panel), mc_group (MT ("GNOME extensions", "إضافات GNOME")));
-  ma_ext_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
-  gtk_box_append (GTK_BOX (panel), ma_ext_box);
+  if (acc_desktop_is_gnome ())
+    {
+      gtk_box_append (GTK_BOX (panel),
+                      mc_group (MT ("GNOME extensions", "إضافات GNOME")));
+      ma_ext_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
+      gtk_box_append (GTK_BOX (panel), ma_ext_box);
+    }
+  else
+    {
+      ma_ext_box = NULL;
+    }
 
   ma_scan ();
   return panel;

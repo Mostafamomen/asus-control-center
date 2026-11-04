@@ -17,7 +17,10 @@
 #include "../control/gfx.h"
 #include "../control/muxreq.h"
 #include "../control/softdim.h"
+#include "../control/nightlight.h"
+#include "../control/touchpadctl.h"
 #include "../probe/probe.h"
+#include "../probe/desktop.h"
 #include "../probe/devs.h"
 #include "../probe/battery.h"
 #include "../probe/dmi.h"
@@ -27,7 +30,6 @@
 #include "../probe/sysinfo.h"
 #include "../probe/load.h"
 #include <adwaita.h>
-#include <gio/gio.h>
 #include <string.h>
 
 /* ------------------------------------------------ module state ------- */
@@ -115,62 +117,6 @@ w_feat (const gchar *icon, const gchar *title, const gchar *desc,
   return mc_feature (icon, title, desc, out_ctl);
 }
 
-/* --- GSettings bridges (GNOME desktop settings, no root) -------------- */
-static GSettings *
-gs_open (const gchar *schema)
-{
-  GSettingsSchemaSource *src = g_settings_schema_source_get_default ();
-  if (!src)
-    return NULL;
-  GSettingsSchema *s = g_settings_schema_source_lookup (src, schema, TRUE);
-  if (!s)
-    return NULL;
-  GSettings *st = g_settings_new_full (s, NULL, NULL);
-  g_settings_schema_unref (s);
-  return st;
-}
-
-static gboolean
-gs_bool (const gchar *schema, const gchar *key, gboolean def)
-{
-  GSettings *s = gs_open (schema);
-  if (!s)
-    return def;
-  gboolean v = g_settings_get_boolean (s, key);
-  g_object_unref (s);
-  return v;
-}
-
-static void
-gs_set_bool (const gchar *schema, const gchar *key, gboolean v)
-{
-  GSettings *s = gs_open (schema);
-  if (!s)
-    return;
-  g_settings_set_boolean (s, key, v);
-  g_object_unref (s);
-}
-
-static gchar *
-gs_str (const gchar *schema, const gchar *key)
-{
-  GSettings *s = gs_open (schema);
-  if (!s)
-    return NULL;
-  gchar *v = g_settings_get_string (s, key);
-  g_object_unref (s);
-  return v;
-}
-
-static void
-gs_set_str (const gchar *schema, const gchar *key, const gchar *v)
-{
-  GSettings *s = gs_open (schema);
-  if (!s)
-    return;
-  g_settings_set_string (s, key, v);
-  g_object_unref (s);
-}
 
 /* --- read-only connectivity probes (kernel + iw, no root) ------------- */
 static gchar *
@@ -317,24 +263,22 @@ w_ring_val (AccRing *r, gdouble v)
     acc_ring_set_value (r, v);
 }
 
-/* touchpad on/off — GNOME desktop setting, no root needed */
+/* touchpad on/off — DE-aware: GNOME GSettings or xinput */
 static void
 touchpad_cb (GtkSwitch *sw, GParamSpec *ps, gpointer u)
 {
   (void) ps;
   (void) u;
-  gs_set_str ("org.gnome.desktop.peripherals.touchpad", "send-events",
-              gtk_switch_get_active (sw) ? "enabled" : "disabled");
+  acc_touchpad_set (gtk_switch_get_active (sw));
 }
 
-/* eye-care toggle — maps to GNOME's night-light (blue-light filter) */
+/* eye-care toggle — DE-aware: GNOME night-light or KDE Night Color */
 static void
 eyecare_cb (GtkSwitch *sw, GParamSpec *ps, gpointer u)
 {
   (void) ps;
   (void) u;
-  gs_set_bool ("org.gnome.settings-daemon.plugins.color",
-               "night-light-enabled", gtk_switch_get_active (sw));
+  acc_nightlight_set (gtk_switch_get_active (sw));
 }
 
 /* E-Reading: render the whole app window in grayscale (MyASUS Splendid
@@ -998,9 +942,7 @@ acc_page_disp (AccUI *u)
     GtkWidget *fill = w_lbl (NULL, NULL, 0);
     gtk_widget_set_hexpand (fill, TRUE);
     GtkWidget *sw = gtk_switch_new ();
-    gtk_switch_set_active (GTK_SWITCH (sw),
-                           gs_bool ("org.gnome.settings-daemon.plugins.color",
-                                    "night-light-enabled", FALSE));
+    gtk_switch_set_active (GTK_SWITCH (sw), acc_nightlight_get ());
     gtk_widget_set_valign (sw, GTK_ALIGN_CENTER);
     g_signal_connect (sw, "state-set", G_CALLBACK (eyecare_cb), NULL);
     gtk_box_append (GTK_BOX (sr), fill);
@@ -1429,26 +1371,23 @@ acc_page_perf (AccUI *u)
   gtk_box_append (GTK_BOX (kbox), kctl);
   gtk_box_append (GTK_BOX (li), kbox);
 
-  /* touchpad block — Input Device group, real GNOME setting */
+  /* touchpad block — Input Device group, DE-aware (GNOME / xinput) */
   {
     GtkWidget *ctl;
     GtkWidget *row = w_feat ("input-touchpad-symbolic",
                              acc_tr (ACC_T_TOUCHPAD),
                              acc_tr (ACC_T_TOUCHPAD_SUB), &ctl);
-    gchar *se = gs_str ("org.gnome.desktop.peripherals.touchpad",
-                        "send-events");
     GtkWidget *sr = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     GtkWidget *fill = w_lbl (NULL, NULL, 0);
     gtk_widget_set_hexpand (fill, TRUE);
     GtkWidget *sw = gtk_switch_new ();
-    gtk_switch_set_active (GTK_SWITCH (sw), g_strcmp0 (se, "disabled") != 0);
+    gtk_switch_set_active (GTK_SWITCH (sw), acc_touchpad_get ());
     gtk_widget_set_valign (sw, GTK_ALIGN_CENTER);
     g_signal_connect (sw, "state-set", G_CALLBACK (touchpad_cb), NULL);
     gtk_box_append (GTK_BOX (sr), fill);
     gtk_box_append (GTK_BOX (sr), sw);
     gtk_box_append (GTK_BOX (ctl), sr);
     gtk_box_append (GTK_BOX (li), row);
-    g_free (se);
   }
 
   gtk_box_append (GTK_BOX (c), li);
@@ -1466,7 +1405,7 @@ acc_page_sys (AccUI *u)
   GtkWidget *block = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 18);
   {
     GtkWidget *cim = gtk_image_new_from_icon_name
-      ("org.gnome.Settings-symbolic");
+      ("preferences-system-symbolic");
     gtk_image_set_pixel_size (GTK_IMAGE (cim), 40);
     gtk_widget_add_css_class (cim, "cardicon");
     gtk_widget_set_valign (cim, GTK_ALIGN_START);
