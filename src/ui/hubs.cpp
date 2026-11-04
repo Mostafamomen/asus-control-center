@@ -242,7 +242,7 @@ acc_page_hardware (AccUI *u)
     gtk_box_append (GTK_BOX (r), kv (acc_tr (ACC_T_SYS_RAM), &h_mem));
     gtk_box_append (GTK_BOX (r), kv (acc_tr (ACC_T_HW_USED), &h_mem_used));
     gtk_flow_box_append (GTK_FLOW_BOX (flow),
-                         hardware_card ("media-memory-symbolic",
+                         hardware_card ("media-flash-symbolic",
                                         ACC_T_HW_MEM, r));
   }
   {

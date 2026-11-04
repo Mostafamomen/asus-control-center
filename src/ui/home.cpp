@@ -415,7 +415,7 @@ card_sys (AccUI *u)
                                "applications-science-symbolic"));
   gtk_box_append (GTK_BOX (li),
                   stat_simple (acc_tr (ACC_T_SYS_RAM), &u->sys_ram,
-                               "media-memory-symbolic"));
+                               "media-flash-symbolic"));
   gtk_box_append (GTK_BOX (li),
                   stat_simple (acc_tr (ACC_T_SYS_SSD), &u->sys_ssd,
                                "drive-harddisk-symbolic"));
@@ -597,10 +597,10 @@ stat_band (AccUI *u)
                        mc_stat ("battery-symbolic",
                                 acc_tr (ACC_T_CARD_BATTERY), &u->tile_bat));
   gtk_flow_box_append (GTK_FLOW_BOX (grid),
-                       mc_stat ("cpu-symbolic", acc_tr (ACC_T_HW_PROC),
+                       mc_stat ("application-x-executable-symbolic", acc_tr (ACC_T_HW_PROC),
                                 &u->tile_cpu));
   gtk_flow_box_append (GTK_FLOW_BOX (grid),
-                       mc_stat ("media-memory-symbolic",
+                       mc_stat ("media-flash-symbolic",
                                 acc_tr (ACC_T_SYS_RAM), &u->tile_mem));
   GtkWidget *disk = mc_stat ("drive-harddisk-symbolic",
                              acc_tr (ACC_T_HW_STORAGE), &u->tile_disk);

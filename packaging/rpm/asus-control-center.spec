@@ -1,5 +1,5 @@
 Name:           asus-control-center
-Version:        1.0.0
+Version:        1.1.0
 Release:        1%{?dist}
 Summary:        Battery, performance, GPU and display controls for ASUS laptops
 
@@ -61,6 +61,16 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.asus
 %{_datadir}/asus-control-center/
 
 %changelog
+* Tue Nov 04 2026 Mostafa Momen <mostafamomen6521@gmail.com> - 1.1.0-1
+- MyASUS-inspired UI/UX redesign: unified cyan/teal palette, responsive
+  dashboard, streamlined navigation
+- System Tools: interactive, safe-by-default Health, Storage (cleanup with
+  preview), Processes (confirmed SIGTERM), Startup manager
+- Software Center: card-based, apt/dpkg and dnf/rpm auto-detection
+- Diagnostics: Passed/Warning/Failed/Unsupported/Not-tested states, report export
+- New fox logo on a borderless cyan/teal tile
+- Fix missing cpu/memory icons on Fedora Adwaita (baseline warnings)
+
 * Mon Nov 03 2026 Mostafa Momen <mostafamomen6521@gmail.com> - 1.0.0-1
 - System Manager: Smart Recommendations, CPU/RAM monitoring, health history
 - System Manager: Quick Actions, improved proc_timer lifecycle

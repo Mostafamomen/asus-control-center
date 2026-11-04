@@ -1,3 +1,19 @@
+asus-control-center (1.1.0) unstable; urgency=medium
+
+  * MyASUS-inspired UI/UX redesign: unified cyan/teal palette, responsive
+    dashboard, streamlined navigation, width-clamped pages.
+  * System Tools: interactive and safe-by-default — Health, Storage (largest
+    folders + cache cleanup with preview/confirm), Processes (searchable,
+    sortable, confirmed SIGTERM on the user's own PIDs), Startup manager.
+  * Software Center: card-based, read-only, apt/dpkg and dnf/rpm detection.
+  * Diagnostics: Passed/Warning/Failed/Unsupported/Not-tested states and a
+    Save-report export.
+  * New fox logo on a borderless cyan/teal tile.
+  * Fix missing cpu/memory symbolic icons on Fedora (GtkImage baseline
+    warnings) and a stale version string on the Settings page.
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Tue, 04 Nov 2026 12:00:00 +0300
+
 asus-control-center (1.0.0) unstable; urgency=medium
 
   * System Manager: health overview, CPU/RAM monitoring, Smart Recommendations,

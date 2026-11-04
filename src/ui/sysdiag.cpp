@@ -994,7 +994,7 @@ acc_sysdiag_page (AccUI *u)
                &sd_touch_val, &sd_touch_pill,
                G_CALLBACK (run_touch_cb), NULL, ACC_T_RUN));
     gtk_flow_box_append (GTK_FLOW_BOX (flow),
-      sd_card ("media-memory-symbolic", ACC_T_CHECK_RAM,
+      sd_card ("media-flash-symbolic", ACC_T_CHECK_RAM,
                &sd_ram_val, &sd_ram_pill,
                G_CALLBACK (run_ram_cb), NULL, ACC_T_RUN));
     gtk_flow_box_append (GTK_FLOW_BOX (flow),
