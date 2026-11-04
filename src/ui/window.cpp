@@ -7,6 +7,7 @@
 #include "hubs.h"
 #include "sysmgr.h"
 #include "softcenter.h"
+#include "security.h"
 #include "theme.h"
 #include "mcui.h"
 #include "login.h"
@@ -393,6 +394,15 @@ acc_ui_theme_toggle (void)
   acc_ui_boot (g_app);
 }
 
+/* rebuild the whole window in place (used when a preference that is applied
+ * at page-build time, e.g. the scrolling-effects toggle, changes) */
+void
+acc_ui_rebuild (void)
+{
+  acc_ui_destroy ();
+  acc_ui_boot (g_app);
+}
+
 void
 acc_ui_apply_theme (void)
 {
@@ -620,6 +630,7 @@ acc_ui_boot (GtkApplication *app)
     { "preferences-system-symbolic",       ACC_T_NAV_CUSTOM,   "customization", ACC_T_SEC_DEV   },
     { "computer-symbolic",                 ACC_T_NAV_HW,       "hardware",      -1              },
     { "applications-utilities-symbolic",   ACC_T_NAV_DIAG,     "diagnosis",     ACC_T_SEC_SYSTEM},
+    { "security-high-symbolic",            ACC_T_NAV_SECURITY, "security",      -1              },
     { "applications-system-symbolic",      ACC_T_NAV_TOOLS,    "sysmgr",        -1              },
     { "system-software-install-symbolic",  ACC_T_NAV_SOFTWARE, "softcenter",    -1              },
     { "software-update-available-symbolic",ACC_T_NAV_UPD,      "support",       -1              },
@@ -647,6 +658,7 @@ acc_ui_boot (GtkApplication *app)
   gtk_stack_add_named (GTK_STACK (stack), acc_page_hardware (ui), "hardware");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_diagnosis (ui), "diagnosis");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_updates (ui), "support");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_security (ui), "security");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_sysmgr (ui), "sysmgr");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_softcenter (ui), "softcenter");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_settings (ui), "settings");
@@ -743,6 +755,7 @@ acc_ui_destroy (void)
   acc_hubs_teardown ();
   acc_sysmgr_teardown ();
   acc_softcenter_teardown ();
+  acc_security_teardown ();
   g_side = NULL;
   g_brandmark = NULL;
   g_uchip = NULL;

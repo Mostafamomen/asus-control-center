@@ -1584,6 +1584,47 @@ notify_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
   acc_pref_set_notifications (gtk_switch_get_active (sw));
 }
 
+/* --- Security Center + scrolling-effect settings --- */
+static void
+anim_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
+{
+  (void) ps; (void) user;
+  if (s_sync)
+    return;
+  acc_pref_set_anim_enabled (gtk_switch_get_active (sw));
+  acc_ui_rebuild ();   /* applied at page-build time */
+}
+
+static void
+intensity_cb (GtkDropDown *dd, GParamSpec *ps, gpointer user)
+{
+  (void) ps; (void) user;
+  if (s_sync)
+    return;
+  const gchar *levels[] = { "subtle", "balanced", "enhanced" };
+  guint i = gtk_drop_down_get_selected (dd);
+  if (i < G_N_ELEMENTS (levels))
+    acc_pref_set_anim_intensity (levels[i]);
+}
+
+static void
+secnotify_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
+{
+  (void) ps; (void) user;
+  if (s_sync)
+    return;
+  acc_pref_set_security_notify (gtk_switch_get_active (sw));
+}
+
+static void
+scankeep_cb (GtkSpinButton *sb, gpointer user)
+{
+  (void) user;
+  if (s_sync)
+    return;
+  acc_pref_set_scan_keep (gtk_spin_button_get_value_as_int (sb));
+}
+
 GtkWidget *
 acc_page_settings (AccUI *u)
 {
@@ -1688,6 +1729,66 @@ acc_page_settings (AccUI *u)
     g_signal_connect (notify_sw, "state-set", G_CALLBACK (notify_cb), NULL);
     gtk_box_append (GTK_BOX (notify_row), notify_sw);
     gtk_box_append (GTK_BOX (ctl), notify_row);
+
+    /* security-center notifications */
+    GtkWidget *sn_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (sn_row), w_lbl (acc_tr (ACC_T_SET_SEC_NOTIFY), "dim", 0));
+    GtkWidget *sn_fill = w_lbl (NULL, NULL, 0);
+    gtk_widget_set_hexpand (sn_fill, TRUE);
+    gtk_box_append (GTK_BOX (sn_row), sn_fill);
+    GtkWidget *sn_sw = gtk_switch_new ();
+    gtk_switch_set_active (GTK_SWITCH (sn_sw), acc_pref_security_notify ());
+    gtk_widget_set_valign (sn_sw, GTK_ALIGN_CENTER);
+    g_signal_connect (sn_sw, "state-set", G_CALLBACK (secnotify_cb), NULL);
+    gtk_box_append (GTK_BOX (sn_row), sn_sw);
+    gtk_box_append (GTK_BOX (ctl), sn_row);
+
+    /* scrolling effects on/off */
+    GtkWidget *an_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *an_txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
+    gtk_box_append (GTK_BOX (an_txt), w_lbl (acc_tr (ACC_T_SET_ANIM), "dim", 0));
+    GtkWidget *an_sub = w_lbl (acc_tr (ACC_T_SET_ANIM_SUB), "foot", 0);
+    gtk_label_set_wrap (GTK_LABEL (an_sub), TRUE);
+    gtk_box_append (GTK_BOX (an_txt), an_sub);
+    gtk_widget_set_hexpand (an_txt, TRUE);
+    gtk_box_append (GTK_BOX (an_row), an_txt);
+    GtkWidget *an_sw = gtk_switch_new ();
+    gtk_switch_set_active (GTK_SWITCH (an_sw), acc_pref_anim_enabled ());
+    gtk_widget_set_valign (an_sw, GTK_ALIGN_CENTER);
+    g_signal_connect (an_sw, "state-set", G_CALLBACK (anim_cb), NULL);
+    gtk_box_append (GTK_BOX (an_row), an_sw);
+    gtk_box_append (GTK_BOX (ctl), an_row);
+
+    /* animation intensity */
+    GtkWidget *in_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (in_row), w_lbl (acc_tr (ACC_T_SET_INTENSITY), "dim", 0));
+    GtkWidget *in_fill = w_lbl (NULL, NULL, 0);
+    gtk_widget_set_hexpand (in_fill, TRUE);
+    gtk_box_append (GTK_BOX (in_row), in_fill);
+    const char *ilabels[] = { acc_tr (ACC_T_INTENSITY_SUBTLE),
+                              acc_tr (ACC_T_INTENSITY_BALANCED),
+                              acc_tr (ACC_T_INTENSITY_ENHANCED), NULL };
+    GtkWidget *in_dd = gtk_drop_down_new_from_strings (ilabels);
+    const gchar *cur = acc_pref_anim_intensity ();
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (in_dd),
+        g_strcmp0 (cur, "subtle") == 0 ? 0 : g_strcmp0 (cur, "enhanced") == 0 ? 2 : 1);
+    gtk_widget_set_valign (in_dd, GTK_ALIGN_CENTER);
+    g_signal_connect (in_dd, "notify::selected", G_CALLBACK (intensity_cb), NULL);
+    gtk_box_append (GTK_BOX (in_row), in_dd);
+    gtk_box_append (GTK_BOX (ctl), in_row);
+
+    /* scan-history retention */
+    GtkWidget *sk_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (sk_row), w_lbl (acc_tr (ACC_T_SET_SCAN_KEEP), "dim", 0));
+    GtkWidget *sk_fill = w_lbl (NULL, NULL, 0);
+    gtk_widget_set_hexpand (sk_fill, TRUE);
+    gtk_box_append (GTK_BOX (sk_row), sk_fill);
+    GtkWidget *sk_sb = gtk_spin_button_new_with_range (1, 200, 1);
+    gtk_spin_button_set_value (GTK_SPIN_BUTTON (sk_sb), acc_pref_scan_keep ());
+    gtk_widget_set_valign (sk_sb, GTK_ALIGN_CENTER);
+    g_signal_connect (sk_sb, "value-changed", G_CALLBACK (scankeep_cb), NULL);
+    gtk_box_append (GTK_BOX (sk_row), sk_sb);
+    gtk_box_append (GTK_BOX (ctl), sk_row);
 
     gtk_box_append (GTK_BOX (block), ctl);
   }

@@ -41,6 +41,18 @@ GtkWidget *mc_page   (GtkWidget *child);             /* scrollable, width-clampe
  * gtk_flow_box_append (). */
 GtkWidget *mc_grid   (int min_cols, int max_cols);
 
+/* Scrollable, width-clamped page body with the three-layer depth effect:
+ *   1. a subtle parallax background that drifts slower than the content,
+ *   2. the normal content scroll,
+ *   3. cards that rise + fade in as they appear (foreground).
+ * The effect is applied only when the user enabled scrolling effects AND the
+ * desktop allows animations (reduced-motion off); otherwise this behaves
+ * exactly like mc_page (). Safe for mouse/touchpad/keyboard and RTL. */
+GtkWidget *mc_page_layered (GtkWidget *child);
+
+/* TRUE when scrolling effects should run (pref on + animations allowed). */
+gboolean   mc_fx_active (void);
+
 /* card with a header row (accent icon badge + title) and an empty vertical
  * body; the body box is returned through out_body for the caller to fill. */
 GtkWidget *mc_card_titled (const gchar *icon, const gchar *title,

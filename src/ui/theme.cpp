@@ -15,6 +15,12 @@ static gboolean s_dark = FALSE;
 static gboolean s_gray = FALSE;
 static gboolean s_notify = TRUE;
 
+/* Security Center + scrolling-animation preferences (Security Center feature) */
+static gboolean s_anim = TRUE;               /* scrolling depth effects on   */
+static gchar   *s_anim_level = NULL;         /* "subtle"|"balanced"|"enhanced" */
+static gboolean s_sec_notify = TRUE;         /* security-center notifications */
+static int      s_scan_keep = 20;            /* scan-history entries to keep  */
+
 static gchar *
 pref_path (void)
 {
@@ -34,7 +40,23 @@ acc_theme_load_pref (void)
       s_gray = g_key_file_get_boolean (kf, "display", "gray", NULL);
       if (g_key_file_has_key (kf, "app", "notifications", NULL))
         s_notify = g_key_file_get_boolean (kf, "app", "notifications", NULL);
+      if (g_key_file_has_key (kf, "anim", "enabled", NULL))
+        s_anim = g_key_file_get_boolean (kf, "anim", "enabled", NULL);
+      if (g_key_file_has_key (kf, "anim", "intensity", NULL))
+        {
+          g_free (s_anim_level);
+          s_anim_level = g_key_file_get_string (kf, "anim", "intensity", NULL);
+        }
+      if (g_key_file_has_key (kf, "security", "notifications", NULL))
+        s_sec_notify = g_key_file_get_boolean (kf, "security",
+                                               "notifications", NULL);
+      if (g_key_file_has_key (kf, "security", "scan_keep", NULL))
+        s_scan_keep = g_key_file_get_integer (kf, "security", "scan_keep",
+                                              NULL);
     }
+
+  if (!s_anim_level)
+    s_anim_level = g_strdup ("balanced");
 
   g_key_file_free (kf);
   g_free (p);
@@ -100,6 +122,98 @@ acc_pref_set_notifications (gboolean on)
 {
   s_notify = on;
   save_key ("app", "notifications", on);
+}
+
+/* string/int variants of save_key (same "preserve other keys" behaviour) */
+static void
+save_key_str (const gchar *group, const gchar *key, const gchar *v)
+{
+  gchar *dir = g_build_filename (g_get_user_config_dir (),
+                                 "asus-control-center", NULL);
+  g_mkdir_with_parents (dir, 0700);
+  gchar *p = g_build_filename (dir, "settings.conf", NULL);
+  GKeyFile *kf = g_key_file_new ();
+  g_key_file_load_from_file (kf, p, G_KEY_FILE_NONE, NULL);
+  g_key_file_set_string (kf, group, key, v ? v : "");
+  g_key_file_save_to_file (kf, p, NULL);
+  g_key_file_free (kf);
+  g_free (p);
+  g_free (dir);
+}
+
+static void
+save_key_int (const gchar *group, const gchar *key, int v)
+{
+  gchar *dir = g_build_filename (g_get_user_config_dir (),
+                                 "asus-control-center", NULL);
+  g_mkdir_with_parents (dir, 0700);
+  gchar *p = g_build_filename (dir, "settings.conf", NULL);
+  GKeyFile *kf = g_key_file_new ();
+  g_key_file_load_from_file (kf, p, G_KEY_FILE_NONE, NULL);
+  g_key_file_set_integer (kf, group, key, v);
+  g_key_file_save_to_file (kf, p, NULL);
+  g_key_file_free (kf);
+  g_free (p);
+  g_free (dir);
+}
+
+gboolean
+acc_pref_anim_enabled (void)
+{
+  return s_anim;
+}
+
+void
+acc_pref_set_anim_enabled (gboolean on)
+{
+  s_anim = on;
+  save_key ("anim", "enabled", on);
+}
+
+const gchar *
+acc_pref_anim_intensity (void)
+{
+  return s_anim_level ? s_anim_level : "balanced";
+}
+
+void
+acc_pref_set_anim_intensity (const gchar *level)
+{
+  if (!level || !*level)
+    level = "balanced";
+  g_free (s_anim_level);
+  s_anim_level = g_strdup (level);
+  save_key_str ("anim", "intensity", level);
+}
+
+gboolean
+acc_pref_security_notify (void)
+{
+  return s_sec_notify;
+}
+
+void
+acc_pref_set_security_notify (gboolean on)
+{
+  s_sec_notify = on;
+  save_key ("security", "notifications", on);
+}
+
+int
+acc_pref_scan_keep (void)
+{
+  return s_scan_keep > 0 ? s_scan_keep : 20;
+}
+
+void
+acc_pref_set_scan_keep (int n)
+{
+  if (n < 1)
+    n = 1;
+  if (n > 200)
+    n = 200;
+  s_scan_keep = n;
+  save_key_int ("security", "scan_keep", n);
 }
 
 static gchar *

@@ -239,6 +239,27 @@ static const gchar *EN[ACC_T_COUNT] = {
   /* Diagnostics status + export (Stage 5) */
   "Passed", "Warning", "Failed", "Unsupported", "Not tested",
   "Save report", "Report saved", "History", "No earlier runs recorded",
+  /* Security Center */
+  "Security",
+  "Read-only overview of your system's security posture.",
+  "Overview", "Firewall", "Boot & Kernel", "Applications", "Privacy", "Tools",
+  "Secure", "Warning", "Critical", "Unknown", "Unsupported",
+  "Last checked", "Details", "Re-check", "not yet",
+  "Secure Boot", "Firewall", "SELinux", "Security updates", "Kernel",
+  "Security services",
+  "Active zones", "Allowed services", "Open ports", "Enabled at startup",
+  "How to configure the firewall",
+  "NVIDIA modules", "Module signing",
+  "Package sources", "Updatable packages", "Flatpak updates",
+  "Screen lock", "Automatic login", "Listening services", "Autostart apps",
+  "Detected security tools. A scan runs only when you start it, reads files read-only, and changes nothing.",
+  "Installed", "Not installed", "Run scan", "Scanning…",
+  "Start a %s scan? It reads files read-only and reports findings — it never deletes, quarantines or changes anything.",
+  "Scan finished", "Scan could not run", "Scan cancelled",
+  "Scan history", "No scans recorded yet",
+  "Scrolling effects", "Subtle three-layer depth as you scroll.",
+  "Animation intensity", "Security notifications", "Scan history kept",
+  "Subtle", "Balanced", "Enhanced",
 };
 
 static const gchar *AR[ACC_T_COUNT] = {
@@ -475,6 +496,27 @@ static const gchar *AR[ACC_T_COUNT] = {
   /* Diagnostics status + export (Stage 5) */
   "ناجح", "تحذير", "فشل", "غير مدعوم", "لم يُختبر",
   "حفظ التقرير", "تم حفظ التقرير", "السجل", "لا عمليات سابقة مسجّلة",
+  /* Security Center */
+  "الأمان",
+  "نظرة عامة للقراءة فقط على وضع أمان نظامك.",
+  "نظرة عامة", "الجدار الناري", "الإقلاع والنواة", "التطبيقات", "الخصوصية", "الأدوات",
+  "آمن", "تحذير", "حرج", "غير معروف", "غير مدعوم",
+  "آخر فحص", "التفاصيل", "إعادة الفحص", "ليس بعد",
+  "الإقلاع الآمن", "الجدار الناري", "SELinux", "تحديثات الأمان", "النواة",
+  "خدمات الأمان",
+  "المناطق النشطة", "الخدمات المسموحة", "المنافذ المفتوحة", "مُفعّل عند الإقلاع",
+  "كيفية إعداد الجدار الناري",
+  "وحدات NVIDIA", "توقيع الوحدات",
+  "مصادر الحزم", "حزم قابلة للتحديث", "تحديثات Flatpak",
+  "قفل الشاشة", "تسجيل الدخول التلقائي", "الخدمات المستمعة", "تطبيقات بدء التشغيل",
+  "أدوات الأمان المكتشفة. لا يبدأ الفحص إلا بطلبك، ويقرأ الملفات فقط دون تغيير أي شيء.",
+  "مثبّت", "غير مثبّت", "بدء الفحص", "جارٍ الفحص…",
+  "بدء فحص %s؟ يقرأ الملفات فقط ويبلّغ عن النتائج — لا يحذف أو يعزل أو يغيّر أي شيء.",
+  "انتهى الفحص", "تعذّر تشغيل الفحص", "أُلغي الفحص",
+  "سجل الفحص", "لا عمليات فحص مسجّلة بعد",
+  "تأثيرات التمرير", "عمق ثلاثي الطبقات أثناء التمرير.",
+  "شدة الحركة", "إشعارات الأمان", "عدد عمليات الفحص المحفوظة",
+  "خفيف", "متوازن", "معزّز",
 };
 
 /* count mismatch guard: arrays must both be exactly ACC_T_COUNT long */

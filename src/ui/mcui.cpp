@@ -66,8 +66,9 @@ mc_panel (const gchar *title)
   return box;
 }
 
-GtkWidget *
-mc_page (GtkWidget *child)
+/* the plain scrollable, width-clamped page body (no depth effect) */
+static GtkWidget *
+mc_build_scroll (GtkWidget *child)
 {
   GtkWidget *sc = gtk_scrolled_window_new ();
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sc),
@@ -80,8 +81,7 @@ mc_page (GtkWidget *child)
   gtk_box_append (GTK_BOX (wrap), child);
 
   /* Clamp the readable width so pages don't stretch edge-to-edge on wide
-   * screens (which flung every value to the far right). Content caps at a
-   * comfortable width and centres; it still shrinks to fit narrow windows. */
+   * screens. Content caps at a comfortable width and centres. */
   GtkWidget *clamp = adw_clamp_new ();
   adw_clamp_set_maximum_size (ADW_CLAMP (clamp), 1180);
   adw_clamp_set_tightening_threshold (ADW_CLAMP (clamp), 900);
@@ -89,6 +89,106 @@ mc_page (GtkWidget *child)
 
   gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (sc), clamp);
   return sc;
+}
+
+/* ---- three-layer scrolling depth (background parallax + card entrance) ---- */
+gboolean
+mc_fx_active (void)
+{
+  if (!acc_pref_anim_enabled ())
+    return FALSE;
+  /* GTK folds the desktop's reduced-motion preference into this setting */
+  gboolean anim = TRUE;
+  GtkSettings *s = gtk_settings_get_default ();
+  if (s)
+    g_object_get (s, "gtk-enable-animations", &anim, NULL);
+  return anim;
+}
+
+static double
+mc_fx_factor (void)
+{
+  const gchar *l = acc_pref_anim_intensity ();
+  if (g_strcmp0 (l, "subtle") == 0)   return 0.08;
+  if (g_strcmp0 (l, "enhanced") == 0) return 0.26;
+  return 0.15;   /* balanced */
+}
+
+typedef struct { GtkWidget *area; double offset; } McParallax;
+
+static void
+mc_parallax_draw (GtkDrawingArea *a, cairo_t *cr, int w, int h, gpointer u)
+{
+  (void) a;
+  McParallax *p = (McParallax *) u;
+  GdkRGBA c;
+  if (!gdk_rgba_parse (&c, acc_theme_col_accent ()))
+    return;
+  double off = p->offset;
+  /* three soft accent blobs that drift at different rates => depth.
+   * Alpha is deliberately very low so the background never competes with
+   * the content. */
+  const double bx[] = { 0.18, 0.84, 0.55 };
+  const double by[] = { 0.20, 0.66, 1.15 };
+  const double br[] = { 0.42, 0.52, 0.48 };
+  const double ba[] = { 0.06, 0.05, 0.045 };
+  const double rate[] = { 0.55, 0.85, 0.35 };
+  for (int i = 0; i < 3; i++)
+    {
+      double cx = w * bx[i];
+      double cy = h * by[i] - off * rate[i];
+      double r = (w > h ? w : h) * br[i];
+      cairo_pattern_t *pat = cairo_pattern_create_radial (cx, cy, 0, cx, cy, r);
+      cairo_pattern_add_color_stop_rgba (pat, 0, c.red, c.green, c.blue, ba[i]);
+      cairo_pattern_add_color_stop_rgba (pat, 1, c.red, c.green, c.blue, 0.0);
+      cairo_set_source (cr, pat);
+      cairo_arc (cr, cx, cy, r, 0, 2 * G_PI);
+      cairo_fill (cr);
+      cairo_pattern_destroy (pat);
+    }
+}
+
+static void
+mc_on_vadj (GtkAdjustment *adj, gpointer u)
+{
+  McParallax *p = (McParallax *) u;
+  p->offset = gtk_adjustment_get_value (adj) * mc_fx_factor ();
+  if (p->area)
+    gtk_widget_queue_draw (p->area);
+}
+
+GtkWidget *
+mc_page_layered (GtkWidget *child)
+{
+  GtkWidget *sc = mc_build_scroll (child);
+  if (!mc_fx_active ())
+    return sc;   /* plain page when effects are off or reduced-motion is on */
+
+  /* background parallax layer behind the (transparent) content */
+  GtkWidget *overlay = gtk_overlay_new ();
+  GtkWidget *area = gtk_drawing_area_new ();
+  McParallax *p = g_new0 (McParallax, 1);
+  p->area = area;
+  gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (area), mc_parallax_draw,
+                                  p, NULL);
+  gtk_overlay_set_child (GTK_OVERLAY (overlay), area);   /* bottom layer */
+
+  gtk_widget_add_css_class (sc, "fxscroll");            /* transparent bg */
+  gtk_widget_add_css_class (child, "fxcards");          /* card entrance  */
+  gtk_overlay_add_overlay (GTK_OVERLAY (overlay), sc);  /* content on top */
+  g_object_set_data_full (G_OBJECT (overlay), "mc-parallax", p, g_free);
+
+  GtkAdjustment *vadj =
+    gtk_scrolled_window_get_vadjustment (GTK_SCROLLED_WINDOW (sc));
+  g_signal_connect (vadj, "value-changed", G_CALLBACK (mc_on_vadj), p);
+  return overlay;
+}
+
+GtkWidget *
+mc_page (GtkWidget *child)
+{
+  /* every page built with mc_page gets the depth effect when it is enabled */
+  return mc_page_layered (child);
 }
 
 GtkWidget *
