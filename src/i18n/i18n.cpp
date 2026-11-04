@@ -217,6 +217,28 @@ static const gchar *EN[ACC_T_COUNT] = {
   "Touchpad device present",
   "No touchpad entry found in /proc/bus/input/devices",
   "No non-hub USB devices found",
+  /* streamlined navigation (Stage 2) */
+  "System Tools", "Software Center", "System", "General",
+  /* System Tools hub (Stage 4) */
+  "Storage, processes, startup and system health — safe by default.",
+  "Health", "Storage", "Processes", "Startup",
+  "Overall condition", "Healthy", "Needs attention",
+  "Recommendations", "Failed services", "No failed services", "Refresh",
+  "Disk usage", "Largest folders in your home", "Cleanable caches", "Preview",
+  "Clear now", "Delete the files listed above? This cannot be undone.",
+  "Nothing to clean", "Scanning…",
+  "Freed space", "Search processes", "Most CPU", "Most memory",
+  "End process", "Send a stop signal to \"%s\" (PID %d)?", "Process", "PID",
+  "CPU", "Memory", "Process stopped", "Your startup apps",
+  "No startup apps for your account", "Disabling stops this app from starting when you sign in.",
+  "Enabled", "Disabled", "Cancel",
+  "System services are managed by the OS and shown read-only.",
+  "CPU", "Memory", "Disk",
+  /* Software Center (Stage 4) */
+  "Installed apps", "Updates available",
+  /* Diagnostics status + export (Stage 5) */
+  "Passed", "Warning", "Failed", "Unsupported", "Not tested",
+  "Save report", "Report saved", "History", "No earlier runs recorded",
 };
 
 static const gchar *AR[ACC_T_COUNT] = {
@@ -431,6 +453,28 @@ static const gchar *AR[ACC_T_COUNT] = {
   "تم العثور على لوحة اللمس",
   "لم يُعثر على لوحة لمس في /proc/bus/input/devices",
   "لا أجهزة USB غير المراكز الجذرية",
+  /* streamlined navigation (Stage 2) */
+  "أدوات النظام", "مركز البرامج", "النظام", "عام",
+  /* System Tools hub (Stage 4) */
+  "التخزين والعمليات وبدء التشغيل وصحة النظام — آمنة افتراضيًا.",
+  "الصحة", "التخزين", "العمليات", "بدء التشغيل",
+  "الحالة العامة", "سليم", "يحتاج إلى انتباه",
+  "التوصيات", "خدمات فاشلة", "لا خدمات فاشلة", "تحديث",
+  "استخدام القرص", "أكبر المجلدات في مجلدك", "ذاكرات مؤقتة قابلة للتنظيف", "معاينة",
+  "امسح الآن", "حذف الملفات المذكورة أعلاه؟ لا يمكن التراجع.",
+  "لا شيء للتنظيف", "جارٍ الفحص…",
+  "المساحة المحررة", "ابحث في العمليات", "الأكثر استهلاكًا للمعالج", "الأكثر استهلاكًا للذاكرة",
+  "إنهاء العملية", "إرسال إشارة إيقاف إلى \"%s\" (المعرّف %d)؟", "العملية", "المعرّف",
+  "المعالج", "الذاكرة", "تم إيقاف العملية", "تطبيقات بدء التشغيل",
+  "لا تطبيقات بدء تشغيل لحسابك", "التعطيل يمنع هذا التطبيق من البدء عند تسجيل الدخول.",
+  "مفعّل", "معطّل", "إلغاء",
+  "خدمات النظام يديرها نظام التشغيل وتُعرض للقراءة فقط.",
+  "المعالج", "الذاكرة", "القرص",
+  /* Software Center (Stage 4) */
+  "التطبيقات المثبّتة", "تحديثات متوفرة",
+  /* Diagnostics status + export (Stage 5) */
+  "ناجح", "تحذير", "فشل", "غير مدعوم", "لم يُختبر",
+  "حفظ التقرير", "تم حفظ التقرير", "السجل", "لا عمليات سابقة مسجّلة",
 };
 
 /* count mismatch guard: arrays must both be exactly ACC_T_COUNT long */

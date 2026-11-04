@@ -8,6 +8,7 @@
 #include "home.h"
 #include "theme.h"
 #include "window.h"
+#include "mcui.h"
 #include "specs.h"
 #include "../i18n/i18n.h"
 #include "../control/brightness.h"
@@ -583,6 +584,85 @@ lap_mock (AccUI *u)
 }
 
 /* ------------------------------------------------------------------ */
+/* compact stat band (Stage 2)                                         */
+/* A single row of four live metrics. The value labels are the AccUI    */
+/* tile_* fields that acc_ui_refresh () already populates (NULL-guarded),*/
+/* so no refresh changes are needed to light them up.                   */
+/* ------------------------------------------------------------------ */
+static GtkWidget *
+stat_band (AccUI *u)
+{
+  GtkWidget *grid = mc_grid (2, 4);
+  gtk_flow_box_append (GTK_FLOW_BOX (grid),
+                       mc_stat ("battery-symbolic",
+                                acc_tr (ACC_T_CARD_BATTERY), &u->tile_bat));
+  gtk_flow_box_append (GTK_FLOW_BOX (grid),
+                       mc_stat ("cpu-symbolic", acc_tr (ACC_T_HW_PROC),
+                                &u->tile_cpu));
+  gtk_flow_box_append (GTK_FLOW_BOX (grid),
+                       mc_stat ("media-memory-symbolic",
+                                acc_tr (ACC_T_SYS_RAM), &u->tile_mem));
+  GtkWidget *disk = mc_stat ("drive-harddisk-symbolic",
+                             acc_tr (ACC_T_HW_STORAGE), &u->tile_disk);
+  u->tile_disksub = NULL;   /* sub-caption lives on the Storage card now */
+  gtk_flow_box_append (GTK_FLOW_BOX (grid), disk);
+  return grid;
+}
+
+/* ------------------------------------------------------------------ */
+/* Quick Actions card (Stage 2): compact launchers into real pages     */
+/* ------------------------------------------------------------------ */
+static GtkWidget *
+quick_tile (const gchar *icon, const gchar *text, const gchar *page)
+{
+  GtkWidget *b = gtk_button_new ();
+  gtk_widget_add_css_class (b, "quickaction");
+  gtk_widget_set_hexpand (b, TRUE);
+  GtkWidget *h = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *badge = mc_badge (icon, 16);
+  gtk_widget_set_valign (badge, GTK_ALIGN_CENTER);
+  gtk_box_append (GTK_BOX (h), badge);
+  GtkWidget *t = lbl (text, NULL, 0);
+  gtk_widget_set_hexpand (t, TRUE);
+  gtk_widget_set_valign (t, GTK_ALIGN_CENTER);
+  gtk_box_append (GTK_BOX (h), t);
+  GtkWidget *nx = gtk_image_new_from_icon_name ("go-next-symbolic");
+  gtk_widget_set_valign (nx, GTK_ALIGN_CENTER);
+  gtk_box_append (GTK_BOX (h), nx);
+  gtk_button_set_child (GTK_BUTTON (b), h);
+  g_signal_connect (b, "clicked", G_CALLBACK (nav_btn), (gpointer) page);
+  return b;
+}
+
+static GtkWidget *
+card_quick (AccUI *u)
+{
+  (void) u;
+  GtkWidget *body = NULL;
+  GtkWidget *c = mc_card_titled ("view-grid-symbolic",
+                                 acc_tr (ACC_T_QUICK_HEAD), &body);
+
+  GtkWidget *g = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (g), 8);
+  gtk_grid_set_column_spacing (GTK_GRID (g), 8);
+  gtk_grid_set_column_homogeneous (GTK_GRID (g), TRUE);
+  struct { const gchar *icon, *txt, *page; } acts[] = {
+    { "battery-symbolic",              acc_tr (ACC_T_CARD_BATTERY), "battery"      },
+    { "applications-utilities-symbolic", acc_tr (ACC_T_NAV_DIAG),   "diagnosis"    },
+    { "display-brightness-symbolic",   acc_tr (ACC_T_NAV_DISP),     "display"      },
+    { "applications-system-symbolic",  acc_tr (ACC_T_TAB_PERF),     "performance"  },
+    { "system-software-install-symbolic", acc_tr (ACC_T_NAV_SOFTWARE), "softcenter" },
+    { "software-update-available-symbolic", acc_tr (ACC_T_NAV_UPD),  "support"     },
+  };
+  for (guint i = 0; i < G_N_ELEMENTS (acts); i++)
+    gtk_grid_attach (GTK_GRID (g),
+                     quick_tile (acts[i].icon, acts[i].txt, acts[i].page),
+                     i % 2, i / 2, 1, 1);
+  gtk_box_append (GTK_BOX (body), g);
+  return c;
+}
+
+/* ------------------------------------------------------------------ */
 /* page assembly                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -670,19 +750,33 @@ acc_home_build (AccUI *u)
   }
   gtk_box_append (GTK_BOX (page), hero);
 
-  /* cards grid: 3 × 2 — battery, GPU, display; system + wide fans card */
-  GtkWidget *grid = gtk_grid_new ();
-  gtk_grid_set_column_spacing (GTK_GRID (grid), 14);
-  gtk_grid_set_row_spacing (GTK_GRID (grid), 14);
-  gtk_grid_set_column_homogeneous (GTK_GRID (grid), TRUE);
+  /* compact live-metric band under the hero */
+  gtk_box_append (GTK_BOX (page), stat_band (u));
 
-  gtk_grid_attach (GTK_GRID (grid), card_battery (u), 0, 0, 1, 1);
-  gtk_grid_attach (GTK_GRID (grid), card_gpu (u),      1, 0, 1, 1);
-  gtk_grid_attach (GTK_GRID (grid), card_oled (u),     2, 0, 1, 1);
-  gtk_grid_attach (GTK_GRID (grid), card_sys (u),      0, 1, 1, 1);
-  gtk_grid_attach (GTK_GRID (grid), card_fans (u),     1, 1, 2, 1);
+  /* responsive card grid: reflows 3 → 2 → 1 columns as the window narrows
+   * (the old fixed GtkGrid overflowed and clipped the rightmost card). */
+  GtkWidget *grid = mc_grid (1, 3);
+  GtkWidget *cards[] = {
+    card_sys (u),       /* Device / system overview   */
+    card_battery (u),   /* Battery care               */
+    card_fans (u),      /* Performance & thermals     */
+    card_gpu (u),       /* Graphics                   */
+    card_oled (u),      /* Display                    */
+    card_quick (u),     /* Quick actions              */
+  };
+  for (guint i = 0; i < G_N_ELEMENTS (cards); i++)
+    {
+      gtk_widget_set_size_request (cards[i], 300, -1);
+      gtk_flow_box_append (GTK_FLOW_BOX (grid), cards[i]);
+    }
   gtk_box_append (GTK_BOX (page), grid);
 
-  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), page);
+  /* clamp the readable width and centre on wide screens */
+  GtkWidget *clamp = adw_clamp_new ();
+  adw_clamp_set_maximum_size (ADW_CLAMP (clamp), 1180);
+  adw_clamp_set_tightening_threshold (ADW_CLAMP (clamp), 900);
+  adw_clamp_set_child (ADW_CLAMP (clamp), page);
+
+  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), clamp);
   return scroll;
 }

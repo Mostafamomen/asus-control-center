@@ -3,6 +3,7 @@
  */
 #include "mcui.h"
 #include "theme.h"
+#include <adwaita.h>
 
 /* ------------------------------------------------------------------ */
 /* basic text                                                          */
@@ -77,8 +78,79 @@ mc_page (GtkWidget *child)
   gtk_widget_set_margin_start (wrap, 20);
   gtk_widget_set_margin_end (wrap, 20);
   gtk_box_append (GTK_BOX (wrap), child);
-  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (sc), wrap);
+
+  /* Clamp the readable width so pages don't stretch edge-to-edge on wide
+   * screens (which flung every value to the far right). Content caps at a
+   * comfortable width and centres; it still shrinks to fit narrow windows. */
+  GtkWidget *clamp = adw_clamp_new ();
+  adw_clamp_set_maximum_size (ADW_CLAMP (clamp), 1180);
+  adw_clamp_set_tightening_threshold (ADW_CLAMP (clamp), 900);
+  adw_clamp_set_child (ADW_CLAMP (clamp), wrap);
+
+  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (sc), clamp);
   return sc;
+}
+
+GtkWidget *
+mc_grid (int min_cols, int max_cols)
+{
+  GtkWidget *flow = gtk_flow_box_new ();
+  gtk_flow_box_set_selection_mode (GTK_FLOW_BOX (flow), GTK_SELECTION_NONE);
+  gtk_flow_box_set_homogeneous (GTK_FLOW_BOX (flow), TRUE);
+  gtk_flow_box_set_row_spacing (GTK_FLOW_BOX (flow), 14);
+  gtk_flow_box_set_column_spacing (GTK_FLOW_BOX (flow), 14);
+  gtk_flow_box_set_min_children_per_line (GTK_FLOW_BOX (flow),
+                                          MAX (1, min_cols));
+  gtk_flow_box_set_max_children_per_line (GTK_FLOW_BOX (flow),
+                                          MAX (min_cols, max_cols));
+  gtk_widget_add_css_class (flow, "cardgrid");
+  return flow;
+}
+
+GtkWidget *
+mc_card_titled (const gchar *icon, const gchar *title, GtkWidget **out_body)
+{
+  GtkWidget *c = mc_card ();
+  GtkWidget *head = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
+  if (icon)
+    {
+      GtkWidget *badge = mc_badge (icon, 18);
+      gtk_widget_set_valign (badge, GTK_ALIGN_CENTER);
+      gtk_box_append (GTK_BOX (head), badge);
+    }
+  gtk_box_append (GTK_BOX (head), mc_title (title));
+  gtk_box_append (GTK_BOX (c), head);
+
+  GtkWidget *body = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
+  gtk_widget_set_vexpand (body, TRUE);
+  gtk_box_append (GTK_BOX (c), body);
+  if (out_body)
+    *out_body = body;
+  return c;
+}
+
+GtkWidget *
+mc_stat (const gchar *icon, const gchar *caption, GtkWidget **out_value)
+{
+  GtkWidget *tile = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
+  gtk_widget_add_css_class (tile, "tile");
+
+  GtkWidget *badge = mc_badge (icon, 20);
+  gtk_widget_set_valign (badge, GTK_ALIGN_CENTER);
+  gtk_box_append (GTK_BOX (tile), badge);
+
+  GtkWidget *col = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+  gtk_widget_set_valign (col, GTK_ALIGN_CENTER);
+  gtk_widget_set_hexpand (col, TRUE);
+  GtkWidget *val = mc_label ("—", "statval", 0);
+  GtkWidget *cap = mc_label (caption, "statcap", 0);
+  gtk_box_append (GTK_BOX (col), val);
+  gtk_box_append (GTK_BOX (col), cap);
+  gtk_box_append (GTK_BOX (tile), col);
+
+  if (out_value)
+    *out_value = val;
+  return tile;
 }
 
 /* ------------------------------------------------------------------ */

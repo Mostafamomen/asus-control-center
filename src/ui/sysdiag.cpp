@@ -50,16 +50,31 @@ static GString   *sd_report_text;
 
 /* -------------------------------------------------- helpers ----------- */
 
+/* Map a status code to a localized label and the canonical colour tone, so
+ * every check shows one of five clear states: Passed (green), Warning
+ * (amber), Failed (red), Unsupported / Not tested (grey). The legacy `tone`
+ * argument is ignored — the tone is derived from the status so FAIL is always
+ * red and a check can never be mis-toned. Status codes: "PASS", "WARN",
+ * "FAIL", "UNSUP", anything else -> Not tested. */
 static void
-sd_pill (GtkWidget *pill, const gchar *text, const gchar *tone)
+sd_pill (GtkWidget *pill, const gchar *status, const gchar *tone)
 {
+  (void) tone;
   if (!pill)
     return;
+  const gchar *text;
+  const gchar *cls;
+  if (g_strcmp0 (status, "PASS") == 0)       { text = acc_tr (ACC_T_DST_PASS);  cls = "on"; }
+  else if (g_strcmp0 (status, "WARN") == 0)  { text = acc_tr (ACC_T_DST_WARN);  cls = "soon"; }
+  else if (g_strcmp0 (status, "FAIL") == 0)  { text = acc_tr (ACC_T_DST_FAIL);  cls = "bad"; }
+  else if (g_strcmp0 (status, "UNSUP") == 0) { text = acc_tr (ACC_T_DST_UNSUP); cls = "off"; }
+  else                                        { text = acc_tr (ACC_T_DST_NT);    cls = "off"; }
   gtk_label_set_text (GTK_LABEL (pill), text);
   gtk_widget_remove_css_class (pill, "on");
   gtk_widget_remove_css_class (pill, "off");
   gtk_widget_remove_css_class (pill, "soon");
-  gtk_widget_add_css_class (pill, tone);
+  gtk_widget_remove_css_class (pill, "bad");
+  gtk_widget_add_css_class (pill, cls);
 }
 
 static void
@@ -524,7 +539,7 @@ check_ram (void)
   else
     {
       sd_set (sd_ram_val, "%s", acc_tr (ACC_T_UNAVAILABLE));
-      sd_pill (sd_ram_pill, "UNKNOWN", "off");
+      sd_pill (sd_ram_pill, "UNSUP", "off");
       if (sd_report_text)
         g_string_append_printf (sd_report_text, "%s: UNKNOWN\n",
                                 acc_tr (ACC_T_CHECK_RAM));
@@ -538,7 +553,7 @@ check_usb (void)
   if (!d)
     {
       sd_set (sd_usb_val, "%s", acc_tr (ACC_T_UNAVAILABLE));
-      sd_pill (sd_usb_pill, "UNKNOWN", "off");
+      sd_pill (sd_usb_pill, "UNSUP", "off");
       if (sd_report_text)
         g_string_append_printf (sd_report_text, "%s: UNKNOWN\n",
                                 acc_tr (ACC_T_CHECK_USB));
@@ -614,7 +629,7 @@ check_battery (void)
   else
     {
       sd_set (sd_bat_val, "%s", acc_tr (ACC_T_UNAVAILABLE));
-      sd_pill (sd_bat_pill, "UNKNOWN", "off");
+      sd_pill (sd_bat_pill, "UNSUP", "off");
       if (sd_report_text)
         g_string_append_printf (sd_report_text, "%s: UNKNOWN\n",
                                 acc_tr (ACC_T_CHECK_BAT));
@@ -643,7 +658,7 @@ check_thermal (void)
   else
     {
       sd_set (sd_therm_val, "%s", acc_tr (ACC_T_UNAVAILABLE));
-      sd_pill (sd_therm_pill, "UNKNOWN", "off");
+      sd_pill (sd_therm_pill, "UNSUP", "off");
       if (sd_report_text)
         g_string_append_printf (sd_report_text, "%s: UNKNOWN\n",
                                 acc_tr (ACC_T_CHECK_THERMAL));
@@ -706,7 +721,7 @@ check_storage (void)
       else
         {
           sd_set (sd_stor_val, "%s", acc_tr (ACC_T_UNAVAILABLE));
-          sd_pill (sd_stor_pill, "UNKNOWN", "off");
+          sd_pill (sd_stor_pill, "UNSUP", "off");
           if (sd_report_text)
             g_string_append_printf (sd_report_text, "%s: UNKNOWN\n",
                                     acc_tr (ACC_T_CHECK_STORAGE));
@@ -736,7 +751,7 @@ check_memuse (void)
   else
     {
       sd_set (sd_memuse_val, "%s", acc_tr (ACC_T_UNAVAILABLE));
-      sd_pill (sd_memuse_pill, "UNKNOWN", "off");
+      sd_pill (sd_memuse_pill, "UNSUP", "off");
       if (sd_report_text)
         g_string_append_printf (sd_report_text, "%s: UNKNOWN\n",
                                 acc_tr (ACC_T_CHECK_MEMUSE));
@@ -761,7 +776,7 @@ check_fans (void)
   else
     {
       sd_set (sd_fans_val, "%s", acc_tr (ACC_T_UNAVAILABLE));
-      sd_pill (sd_fans_pill, "UNKNOWN", "off");
+      sd_pill (sd_fans_pill, "UNSUP", "off");
       if (sd_report_text)
         g_string_append_printf (sd_report_text, "%s: UNKNOWN\n",
                                 acc_tr (ACC_T_CHECK_FANS));
@@ -868,6 +883,44 @@ copy_cb (GtkButton *b, gpointer u)
   acc_ui_toast (acc_tr (ACC_T_TT_COPY));
 }
 
+/* ---- export the report to a file the user chooses (Stage 5) ---- */
+static void
+save_done (GObject *src, GAsyncResult *res, gpointer u)
+{
+  (void) u;
+  GFile *f = gtk_file_dialog_save_finish (GTK_FILE_DIALOG (src), res, NULL);
+  if (!f)
+    return;   /* cancelled */
+  if (sd_report_text)
+    g_file_replace_contents (f, sd_report_text->str, sd_report_text->len,
+                             NULL, FALSE, G_FILE_CREATE_NONE, NULL, NULL, NULL);
+  gchar *p = g_file_get_path (f);
+  gchar *msg = g_strdup_printf ("%s: %s", acc_tr (ACC_T_DST_SAVED),
+                                p ? p : "");
+  acc_ui_toast (msg);
+  g_free (msg);
+  g_free (p);
+  g_object_unref (f);
+}
+
+static void
+save_cb (GtkButton *b, gpointer u)
+{
+  (void) b; (void) u;
+  if (!sd_report_text || sd_report_text->len == 0)
+    return;
+  GtkFileDialog *d = gtk_file_dialog_new ();
+  GDateTime *now = g_date_time_new_now_local ();
+  gchar *stamp = g_date_time_format (now, "%Y%m%d-%H%M");
+  gchar *name = g_strdup_printf ("asuscraft-diagnostics-%s.txt", stamp);
+  gtk_file_dialog_set_initial_name (d, name);
+  gtk_file_dialog_save (d, GTK_WINDOW (acc_ui_root ()), NULL, save_done, NULL);
+  g_free (name);
+  g_free (stamp);
+  g_date_time_unref (now);
+  g_object_unref (d);
+}
+
 /* ---------------------------------------- page builder ---------------- */
 
 GtkWidget *
@@ -916,6 +969,10 @@ acc_sysdiag_page (AccUI *u)
     gtk_widget_add_css_class (cp, "actionbtn");
     g_signal_connect (cp, "clicked", G_CALLBACK (copy_cb), NULL);
     gtk_box_append (GTK_BOX (bar), cp);
+    GtkWidget *sv = gtk_button_new_with_label (acc_tr (ACC_T_DST_SAVE));
+    gtk_widget_add_css_class (sv, "actionbtn");
+    g_signal_connect (sv, "clicked", G_CALLBACK (save_cb), NULL);
+    gtk_box_append (GTK_BOX (bar), sv);
     gtk_box_append (GTK_BOX (page), bar);
   }
 

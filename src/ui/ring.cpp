@@ -36,7 +36,7 @@ draw_cb (GtkDrawingArea *da, cairo_t *cr, int w, int h, gpointer user)
   cairo_stroke (cr);
   /* value arc: start at top, clockwise */
   GdkRGBA col;
-  gdk_rgba_parse (&col, r2->color ? r2->color : "#006CE1");
+  gdk_rgba_parse (&col, r2->color ? r2->color : "#0891B2");
   cairo_set_source_rgba (cr, col.red, col.green, col.blue, 1.0);
   cairo_arc (cr, cx, cy, rad, -G_PI / 2, -G_PI / 2 + 2 * G_PI * r2->value);
   cairo_stroke (cr);
@@ -126,7 +126,7 @@ acc_ring_new (const gchar *arc_color)
 {
   AccRing *self = (AccRing *) g_object_new (ACC_TYPE_RING, NULL);
   self->value = 0;
-  self->color = g_strdup (arc_color ? arc_color : "#006CE1");
+  self->color = g_strdup (arc_color ? arc_color : "#0891B2");
   self->big = NULL;
   self->small = NULL;
   /* init already registered draw_cb with self as user data */

@@ -5,19 +5,47 @@
             (title bar + navigation rail on the same colour, no dividers),
             the pages sit on a raised panel with a rounded top-left corner,
             raised cards with 8 px corners and hairline borders,
-            pill-shaped blue buttons.
+            pill-shaped accent buttons.
    Type     Segoe UI (the face MyASUS renders with on Windows), falling
             back to Inter / Noto Sans / Cantarell on Linux. Regular body,
             semibold (600) titles - no heavy 800 weights.
    Palette  chrome #F3F3F3   panel #F9F9F9   card #FFFFFF   border #E5E5E5
-            text #1A1A1A   secondary #616161   accent #006CE1
-            accent fill #006CE1 / hover #1A7DE8
+            text #1A1A1A   secondary #616161   accent #0891B2
+            accent fill #0891B2 / hover #06A7CC
             success #107C10   warning #F59E0B   danger #C42B1C
    MyASUS-inspired; not an official ASUS spec and ships no ASUS artwork.
    Both skins share one layout: keep theme.css and
    theme-dark.css in step (same selectors, different colours).
    Project asset, GPL-3.0-or-later.
    ========================================================================== */
+
+/* ===================== ASUSCraft design tokens (light) =====================
+   One cyan/teal accent system. theme-dark.css defines the SAME names with
+   dark values, so components built with these tokens get both skins free.
+   The MyASUS-inspired base layout below is kept; only its blue was removed. */
+@define-color acc            #0891B2;
+@define-color acc_hover      #06A7CC;
+@define-color acc_press      #067792;
+@define-color acc_text       #067792;
+@define-color acc_fill       #0891B2;
+@define-color acc_fill_hover #06A7CC;
+@define-color acc_tint       #E4F8FB;
+@define-color acc_tint_line  #BDEAF2;
+@define-color ink            #0B1722;
+@define-color sub            #5C7382;
+@define-color faint          #7B909E;
+@define-color line           #DCE7EF;
+@define-color well           #EDF2F6;
+@define-color surface        #F7FAFC;
+@define-color card_bg        #FFFFFF;
+@define-color ok             #107C10;
+@define-color warn           #F59E0B;
+@define-color warn_text      #8A5300;
+@define-color bad            #C42B1C;
+/* native libadwaita widgets follow ASUSCraft too */
+@define-color accent_bg_color #0891B2;
+@define-color accent_color    #067792;
+@define-color accent_fg_color #FFFFFF;
 
 /* ============ type ============ */
 window, popover, dialog {
@@ -83,13 +111,13 @@ headerbar button { color: #1A1A1A; }
 /* selected: soft fill + the short blue indicator on the left edge */
 .acnav > row:selected {
   background: rgba(0, 0, 0, 0.06);
-  box-shadow: inset 3px 0 0 0 #006CE1;
+  box-shadow: inset 3px 0 0 0 #0891B2;
   border-radius: 6px;
   color: #1A1A1A;
 }
-.acnav > row:selected:dir(rtl) { box-shadow: inset -3px 0 0 0 #006CE1; }
+.acnav > row:selected:dir(rtl) { box-shadow: inset -3px 0 0 0 #0891B2; }
 .acnav > row:selected label { color: #1A1A1A; font-weight: 600; }
-.acnav > row:selected image { color: #006CE1; }
+.acnav > row:selected image { color: #0891B2; }
 
 /* sidebar group label ("Device settings" / "Preferences") */
 .acnav > row.navgrouprow {
@@ -130,22 +158,22 @@ button.flat:hover { background: rgba(0, 0, 0, 0.05); color: #1A1A1A; }
 
 /* filled primary call-to-action: the MyASUS blue pill */
 button.primarybtn {
-  background: #006CE1;
+  background: #0891B2;
   border: none; border-radius: 999px;
   padding: 7px 20px; color: #FFFFFF;
   font-weight: 600; font-size: 13px;
   box-shadow: none;
 }
-button.primarybtn:hover  { background: #1A7DE8; }
+button.primarybtn:hover  { background: #06A7CC; }
 button.primarybtn:active { background: #0058BC; }
 button.primarybtn:disabled { background: #E5E5E5; color: #616161; }
 
 /* greeting/user avatar badge */
 .avring {
-  background: #E6F0FC; border-radius: 999px; padding: 6px;
+  background: #E4F8FB; border-radius: 999px; padding: 6px;
   border: none;
 }
-.avring image { color: #006CE1; }
+.avring image { color: #0891B2; }
 
 /* thin quiet scrollbars */
 scrollbar { background: transparent; }
@@ -174,9 +202,9 @@ scrollbar slider:hover { background: #616161; }
 .hero-sub   { color: #616161; font-size: 13px; }
 .heropill {
   background: transparent;
-  border: 1px solid #006CE1;
+  border: 1px solid #0891B2;
   border-radius: 999px; padding: 6px 16px;
-  color: #006CE1; font-size: 13px; font-weight: 600;
+  color: #0891B2; font-size: 13px; font-weight: 600;
 }
 
 /* ============ device strip ============ */
@@ -200,7 +228,7 @@ scrollbar slider:hover { background: #616161; }
   border-radius: 8px; padding: 16px 18px;
 }
 .cardtitle { font-weight: 600; font-size: 15px; color: #1A1A1A; }
-.cardicon  { color: #006CE1; }
+.cardicon  { color: #0891B2; }
 .dim  { color: #616161; font-size: 12px; }
 .val  { color: #1A1A1A; font-weight: 600; }
 .foot { color: #616161; font-size: 11px; }
@@ -225,7 +253,7 @@ scrollbar slider:hover { background: #616161; }
 
 /* status pills */
 .pill { border-radius: 999px; padding: 2px 12px;
-  background: #E6F0FC; color: #006CE1;
+  background: #E4F8FB; color: #0891B2;
   font-size: 11px; font-weight: 600; }
 separator.hsep { min-height: 1px; background: #EBEBEB; margin: 3px 0; }
 .pill.off  { background: #F5F5F5; color: #616161; }
@@ -236,15 +264,15 @@ separator.hsep { min-height: 1px; background: #EBEBEB; margin: 3px 0; }
 button.actionbtn {
   background: #FFFFFF;
   border: 1px solid #E5E5E5;
-  border-radius: 999px; padding: 6px 14px; color: #006CE1;
+  border-radius: 999px; padding: 6px 14px; color: #0891B2;
   font-weight: 600; font-size: 13px;
   box-shadow: none;
 }
-button.actionbtn:hover { background: #F5F5F5; border-color: #006CE1; }
+button.actionbtn:hover { background: #F5F5F5; border-color: #0891B2; }
 button.actionbtn:disabled {
   background: #F5F5F5; color: #616161; border-color: #E5E5E5;
 }
-button.actionbtn:focus-visible { outline: 2px solid #006CE1; outline-offset: 1px; }
+button.actionbtn:focus-visible { outline: 2px solid #0891B2; outline-offset: 1px; }
 
 /* selectable option cards (battery limits / perf / gpu / kbd levels) */
 checkbutton.optcard {
@@ -262,14 +290,14 @@ checkbutton.optcard:disabled {
   color: #616161; background: #F5F5F5; border-color: #E5E5E5;
 }
 checkbutton.optcard:checked {
-  background: #E6F0FC;
-  border-color: #006CE1;
-  color: #006CE1;
+  background: #E4F8FB;
+  border-color: #0891B2;
+  color: #0891B2;
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px #006CE1;
+  box-shadow: inset 0 0 0 1px #0891B2;
 }
 checkbutton.optcard:focus-visible {
-  outline: 2px solid #006CE1; outline-offset: 1px;
+  outline: 2px solid #0891B2; outline-offset: 1px;
 }
 checkbutton.optcard > check {
   min-width: 0; min-height: 0; margin: 0; padding: 0;
@@ -300,19 +328,19 @@ button.qrow:hover { background: #F5F5F5; }
 /* ============ controls (ASUS blue) ============ */
 scale trough { background: #E1E1E1; border-radius: 999px; min-height: 4px;
   border: none; }
-scale highlight { background: #006CE1; border-radius: 999px; }
+scale highlight { background: #0891B2; border-radius: 999px; }
 scale slider {
-  background: #006CE1; border-radius: 999px;
+  background: #0891B2; border-radius: 999px;
   min-width: 18px; min-height: 18px; margin: -8px;
   box-shadow: 0 0 0 4px #FFFFFF, 0 0 0 5px #E5E5E5;
   border: none;
 }
 switch { border-radius: 999px; }
 switch slider { border-radius: 999px; background: #FFFFFF; }
-switch:checked { background: #006CE1; }
+switch:checked { background: #0891B2; }
 progressbar trough { background: #E1E1E1; border-radius: 999px; min-height: 6px;
   border: none; }
-progressbar progress { background: #006CE1; border-radius: 999px; min-height: 6px; }
+progressbar progress { background: #0891B2; border-radius: 999px; min-height: 6px; }
 
 /* ============ footer bar ============ */
 .footbar {
@@ -335,11 +363,11 @@ progressbar progress { background: #006CE1; border-radius: 999px; min-height: 6p
 
 /* rounded icon badge on stat tiles */
 .iconbadge {
-  background: #E6F0FC;
+  background: #E4F8FB;
   border: none;
   border-radius: 8px; padding: 5px 6px;
 }
-.iconbadge image { color: #006CE1; }
+.iconbadge image { color: #0891B2; }
 
 /* live battery readout on the laptop picture (assets/laptop.png) */
 .lapscreen-pct  {
@@ -355,9 +383,9 @@ button.featrow {
 }
 button.featrow:hover { background: #F5F5F5; }
 button.featrow label { color: #1A1A1A; font-size: 13px; }
-button.featrow:hover label { color: #006CE1; }
+button.featrow:hover label { color: #0891B2; }
 button.featrow image { color: #616161; }
-button.featrow:hover image { color: #006CE1; }
+button.featrow:hover image { color: #0891B2; }
 
 .tile {
   background: #FFFFFF;
@@ -391,15 +419,15 @@ button.featrow:hover image { color: #006CE1; }
   border: 1px solid #E5E5E5;
 }
 .notice .noticehead { color: #1A1A1A; font-weight: 600; font-size: 13px; }
-.notice.info { background: #E6F0FC; border-color: #C7DCF7; }
-.notice.info .noticehead { color: #006CE1; }
+.notice.info { background: #E4F8FB; border-color: #BDEAF2; }
+.notice.info .noticehead { color: #0891B2; }
 .notice.warn { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.45); }
 .notice.warn .noticehead { color: #1A1A1A; }
 
 /* ============ login page ============ */
 .loginroot { background: #F3F3F3; }
 .loginbrand {
-  background: #006CE1;
+  background: #0891B2;
   color: #FFFFFF;
 }
 .loginbrand .loginbrandtitle {
@@ -435,14 +463,14 @@ entry.loginentry {
 entry.loginentry:focus {
   background: #FFFFFF;
   border-color: #E5E5E5;
-  border-bottom: 2px solid #006CE1;
+  border-bottom: 2px solid #0891B2;
   box-shadow: none;
 }
 .logincheck label { color: #1A1A1A; font-size: 13px; }
 .loginerr { color: #C42B1C; font-size: 12px; font-weight: 600; }
 button.loginlink {
   background: transparent; border: none; box-shadow: none;
-  color: #006CE1; font-size: 13px; font-weight: 600; padding: 4px;
+  color: #0891B2; font-size: 13px; font-weight: 600; padding: 4px;
 }
 button.loginlink:hover { color: #0058BC; text-decoration: underline; }
 button.loginbtn { min-height: 38px; font-size: 14px; }
@@ -462,7 +490,7 @@ button.suprow {
   padding: 4px 2px; border-radius: 6px;
 }
 button.suprow:hover { background: #F5F5F5; }
-button.suprow:hover .supkey { color: #006CE1; }
+button.suprow:hover .supkey { color: #0891B2; }
 .suparrow { color: #616161; }
 
 /* GPU badge border follows the detected vendor */
@@ -645,3 +673,32 @@ scrollbar slider:hover { background: #7B909E; }
 .footbar .asusword { color: #0891B2; font-style: normal; letter-spacing: 0.3px; }
 .footbar .slogan, .footbar .leaf { color: #7B909E; }
 .apptagline { color: #7B909E; font-size: 9.5px; font-weight: 600; letter-spacing: 0.2px; }
+
+/* --- dashboard stat tiles + card grid (Stage 2 kit) --- */
+.tile { padding: 14px 16px; }
+.statval { color: @ink; font-size: 21px; font-weight: 800; }
+.statcap { color: @sub; font-size: 12px; font-weight: 600; }
+.cardgrid { }
+.tilehot .statval, .tilehot { color: @warn_text; }
+
+/* --- Quick Actions tiles (Stage 2) --- */
+button.quickaction {
+  background: @well; border: 1px solid @line; border-radius: 12px;
+  padding: 9px 12px; color: @ink; font-weight: 600;
+}
+button.quickaction:hover { background: @acc_tint; border-color: @acc; }
+button.quickaction image { color: @acc; }
+button.quickaction:focus-visible { outline: 2px solid @acc; outline-offset: 1px; }
+
+/* --- System Tools lists (Stage 4) --- */
+list.plainlist { background: transparent; }
+list.plainlist > row { background: transparent; padding: 0; min-height: 0; }
+list.plainlist > row:not(:last-child) { border-bottom: 1px solid @line; }
+list.plainlist > row:selected { background: transparent; }
+
+/* --- Software Center read-outs (Stage 4) --- */
+.readout { font-size: 12.5px; color: @sub; }
+.countbig { font-size: 18px; }
+
+/* --- diagnostics: failed state (Stage 5) --- */
+.pill.bad { background: rgba(196, 43, 28, 0.11); color: @bad; }

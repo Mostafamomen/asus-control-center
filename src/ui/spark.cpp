@@ -34,7 +34,7 @@ spark_draw_cb (GtkDrawingArea *da, cairo_t *cr, int w, int h, gpointer user)
     hi = lo + 1.0;
 
   GdkRGBA col;
-  gdk_rgba_parse (&col, s->color ? s->color : "#006CE1");
+  gdk_rgba_parse (&col, s->color ? s->color : "#0891B2");
 
   cairo_set_line_width (cr, 2.0);
   cairo_set_source_rgba (cr, col.red, col.green, col.blue, 0.9);
@@ -80,7 +80,7 @@ GtkWidget *
 acc_spark_new (const gchar *line_color)
 {
   AccSpark *s = (AccSpark *) g_object_new (ACC_TYPE_SPARK, NULL);
-  s->color = g_strdup (line_color ? line_color : "#006CE1");
+  s->color = g_strdup (line_color ? line_color : "#0891B2");
   return GTK_WIDGET (s);
 }
 

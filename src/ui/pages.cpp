@@ -1623,10 +1623,10 @@ acc_page_settings (AccUI *u)
     gtk_box_append (GTK_BOX (helper_row), f_helper);
     gtk_box_append (GTK_BOX (ctl), helper_row);
 
-    /* static build version — accurate, not read from the hardware */
+    /* build version from the Makefile (-DACC_VERSION), not a stale literal */
     GtkWidget *ver_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_append (GTK_BOX (ver_row), w_lbl (acc_tr (ACC_T_VER), "dim", 0));
-    gtk_box_append (GTK_BOX (ver_row), w_lbl ("0.3", "val", 0));
+    gtk_box_append (GTK_BOX (ver_row), w_lbl (ACC_VERSION, "val", 0));
     gtk_box_append (GTK_BOX (ctl), ver_row);
 
     /* language pill: EN <-> ع */

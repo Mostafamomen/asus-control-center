@@ -610,26 +610,28 @@ acc_ui_boot (GtkApplication *app)
   g_nav = nav;
   gtk_widget_add_css_class (GTK_WIDGET (nav), "acnav");
   gtk_list_box_set_selection_mode (nav, GTK_SELECTION_SINGLE);
-  /* stable page identifiers (used by nav rows and the dashboard ">" buttons) */
-  struct { const gchar *icon; AccStr txt; const gchar *page; } navs[] = {
-    { "view-grid-symbolic",               ACC_T_NAV_HOME,   "home"          },
-    { "emblem-system-symbolic",           ACC_T_NAV_CUSTOM, "customization" },
-    { "computer-symbolic",                ACC_T_NAV_HW,     "hardware"      },
-    { "applications-utilities-symbolic",  ACC_T_NAV_DIAG,   "diagnosis"     },
-    { "software-update-available-symbolic", ACC_T_NAV_UPD,  "support"       },
-    { "applications-system-symbolic",     ACC_T_SERVICE,   "sysmgr"        },
-    { "application-x-executable-symbolic", ACC_T_SERVICE,  "softcenter"    },
-    { "emblem-system-symbolic",           ACC_T_NAV_SET,    "settings"      },
+  /* Streamlined navigation (Stage 2): Home stands alone, then grouped
+   * Device / System / General sections. `group` names the section header to
+   * emit before the row (-1 = no new header). Distinct labels and icons:
+   * the old build showed two identical "Service & repair" rows because
+   * System Manager and Software Center shared one string. */
+  struct { const gchar *icon; AccStr txt; const gchar *page; int group; } navs[] = {
+    { "view-grid-symbolic",                ACC_T_NAV_HOME,     "home",          -1              },
+    { "preferences-system-symbolic",       ACC_T_NAV_CUSTOM,   "customization", ACC_T_SEC_DEV   },
+    { "computer-symbolic",                 ACC_T_NAV_HW,       "hardware",      -1              },
+    { "applications-utilities-symbolic",   ACC_T_NAV_DIAG,     "diagnosis",     ACC_T_SEC_SYSTEM},
+    { "applications-system-symbolic",      ACC_T_NAV_TOOLS,    "sysmgr",        -1              },
+    { "system-software-install-symbolic",  ACC_T_NAV_SOFTWARE, "softcenter",    -1              },
+    { "software-update-available-symbolic",ACC_T_NAV_UPD,      "support",       -1              },
+    { "emblem-system-symbolic",            ACC_T_NAV_SET,      "settings",      ACC_T_SEC_GENERAL},
   };
-  enum { NAV_DEV_END = 4 };   /* rows 0..4 belong to the "Device" group */
-  gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_DEV));
-  for (guint i = 0; i <= NAV_DEV_END; i++)
-    gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
-                                          navs[i].page));
-  gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_PREF));
-  for (guint i = NAV_DEV_END + 1; i < G_N_ELEMENTS (navs); i++)
-    gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
-                                          navs[i].page));
+  for (guint i = 0; i < G_N_ELEMENTS (navs); i++)
+    {
+      if (navs[i].group >= 0)
+        gtk_list_box_append (nav, mk_nav_group ((AccStr) navs[i].group));
+      gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
+                                            navs[i].page));
+    }
 
   GtkWidget *stack = gtk_stack_new ();
   g_stack = stack;
@@ -653,8 +655,8 @@ acc_ui_boot (GtkApplication *app)
   sidebar_load_pref ();
 
   g_signal_connect (nav, "row-selected", G_CALLBACK (on_nav), stack);
-  /* first *selectable* row is now index 1 (index 0 is the "Device settings" label) */
-  GtkListBoxRow *first = gtk_list_box_get_row_at_index (nav, 1);
+  /* Home is the first row now (no section header precedes it) */
+  GtkListBoxRow *first = gtk_list_box_get_row_at_index (nav, 0);
   if (first)
     gtk_list_box_select_row (nav, first);
 

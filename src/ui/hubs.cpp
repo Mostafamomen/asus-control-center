@@ -99,13 +99,13 @@ page_head (AccStr title, AccStr sub)
 static GtkWidget *
 hw_card (const gchar *icon, AccStr title)
 {
+  /* shared accent icon badge + title header, matching Home and the kit;
+   * callers append their rows directly to the returned card */
   GtkWidget *c = mc_card ();
-  GtkWidget *head = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-  GtkWidget *im = gtk_image_new_from_icon_name (icon);
-  gtk_image_set_pixel_size (GTK_IMAGE (im), 18);
-  gtk_widget_add_css_class (im, "cardicon");
-  gtk_widget_set_valign (im, GTK_ALIGN_CENTER);
-  gtk_box_append (GTK_BOX (head), im);
+  GtkWidget *head = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *badge = mc_badge (icon, 18);
+  gtk_widget_set_valign (badge, GTK_ALIGN_CENTER);
+  gtk_box_append (GTK_BOX (head), badge);
   gtk_box_append (GTK_BOX (head), mc_title (acc_tr (title)));
   gtk_box_append (GTK_BOX (c), head);
   return c;
