@@ -8,6 +8,7 @@
 #include "theme.h"
 #include "mcui.h"
 #include "sysdiag.h"
+#include "softdimmer_page.h"
 #include "../i18n/i18n.h"
 #include "../control/asusd.h"
 #include "../control/ctl.h"
@@ -26,7 +27,7 @@
 
 /* ---------------------------------------------------------------- state */
 static GtkStack *s_custom_stack = NULL;
-static GtkWidget *s_custom_tabs[4] = { NULL, NULL, NULL, NULL };
+static GtkWidget *s_custom_tabs[5] = { NULL, NULL, NULL, NULL, NULL };
 
 static GtkWidget *h_model, *h_vendor, *h_bios;
 static GtkWidget *h_cpu, *h_load;
@@ -171,6 +172,7 @@ acc_page_customization (AccUI *u)
     gtk_stack_add_named (GTK_STACK (stack), acc_page_bat (u), "battery");
     gtk_stack_add_named (GTK_STACK (stack), acc_page_gpu (u), "gpu");
     gtk_stack_add_named (GTK_STACK (stack), acc_page_disp (u), "display");
+    gtk_stack_add_named (GTK_STACK (stack), acc_page_softdimmer (u), "softdimmer");
     gtk_stack_set_visible_child_name (GTK_STACK (stack), "performance");
 
     GtkToggleButton *g = NULL;
@@ -180,6 +182,7 @@ acc_page_customization (AccUI *u)
     s_custom_tabs[1] = hub_tab (bar, g, acc_tr (ACC_T_TAB_BAT), "battery", FALSE);
     s_custom_tabs[2] = hub_tab (bar, g, acc_tr (ACC_T_TAB_GPU), "gpu", FALSE);
     s_custom_tabs[3] = hub_tab (bar, g, acc_tr (ACC_T_TAB_DISP), "display", FALSE);
+    s_custom_tabs[4] = hub_tab (bar, g, acc_tr (ACC_T_SOFTDIM), "softdimmer", FALSE);
     return root;
 }
 
@@ -504,7 +507,8 @@ acc_hubs_select (const gchar *page)
         case 0: name = "performance"; break;
         case 1: name = "battery"; break;
         case 2: name = "gpu"; break;
-        default: name = "display"; break;
+        case 3: name = "display"; break;
+        case 4: name = "softdimmer"; break;
         }
         if (g_strcmp0 (page, name) == 0)
         {

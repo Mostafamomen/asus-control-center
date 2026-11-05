@@ -661,6 +661,7 @@ acc_ui_boot (GtkApplication *app)
   gtk_stack_add_named (GTK_STACK (stack), acc_page_pcmanager (ui), "pcmanager");
   gtk_stack_add_named (GTK_STACK (stack), acc_systest_page (ui), "systest");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_settings (ui), "settings");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_softdimmer (ui), "softdimmer");
 
   /* restore the collapsed/expanded state from the last session */
   sidebar_load_pref ();

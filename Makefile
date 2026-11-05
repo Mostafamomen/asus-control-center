@@ -29,7 +29,11 @@ SRCS = src/main.cpp \
        src/user/user.cpp \
        src/ui/window.cpp src/ui/home.cpp src/ui/theme.cpp src/ui/ring.cpp \
        src/ui/spark.cpp src/ui/pages.cpp src/ui/hubs.cpp src/ui/sysdiag.cpp \
-       src/ui/sysmgr.cpp src/ui/softcenter.cpp src/ui/pcmanager.cpp src/ui/systest.cpp src/ui/mcui.cpp src/ui/login.cpp src/ui/specs.cpp
+       src/ui/sysmgr.cpp src/ui/softcenter.cpp src/ui/pcmanager.cpp src/ui/systest.cpp src/ui/mcui.cpp src/ui/login.cpp src/ui/specs.cpp src/ui/softdimmer_page.cpp \
+       src/control/softdimmer/monitor_manager.cpp \
+       src/control/softdimmer/brightness_engine.cpp \
+       src/control/softdimmer/transition_engine.cpp \
+       src/control/softdimmer/softdimmer_service.cpp
 
 BIN = asus-control-center
 
