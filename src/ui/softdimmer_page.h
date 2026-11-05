@@ -10,6 +10,15 @@
 #define ACC_UI_SOFTDIMMER_PAGE_H
 
 #include "window.h"
+#include "../control/softdimmer/brightness_engine.h"
+#include "../control/softdimmer/monitor_manager.h"
+#include "../control/softdimmer/softdimmer_service.h"
+
+/* Application-owned Soft Dimmer engine instances (created in main.cpp).
+ * The Soft Dimmer page borrows them; it does not own them. */
+extern AccSdBrightnessEngine *g_sd_engine;
+extern AccSdMonitorManager   *g_sd_monitors;
+extern AccSdSoftDimmerService *g_sd_service;
 
 G_BEGIN_DECLS
 

@@ -18,6 +18,9 @@
 #include "control/muxreq.h"
 #include "control/softdim.h"
 #include "control/nightlight.h"
+#include "control/softdimmer/brightness_engine.h"
+#include "control/softdimmer/monitor_manager.h"
+#include "control/softdimmer/softdimmer_service.h"
 #include "probe/probe.h"
 #include "probe/desktop.h"
 #include "probe/devs.h"
@@ -31,6 +34,13 @@
 #define APP_ID "io.github.asuscontrolcenter.AsusControlCenter"
 
 static guint refresh_src = 0;
+
+/* Soft Dimmer engine + D-Bus service (owned by the application, created
+ * at startup so the GNOME Shell adapter can connect even before the user
+ * opens the Soft Dimmer page). */
+AccSdBrightnessEngine *g_sd_engine = NULL;
+AccSdMonitorManager   *g_sd_monitors = NULL;
+AccSdSoftDimmerService *g_sd_service = NULL;
 
 static gboolean
 refresh_tick (gpointer user)
@@ -434,6 +444,32 @@ on_activate (GtkApplication *app, gpointer user)
   /* user-level GSettings bridge for the OLED flicker-free dim slider */
   acc_brightness_init (NULL, NULL);
 
+  /* ── Soft Dimmer engine + D-Bus service ── */
+  g_sd_monitors = acc_sd_monitor_manager_new ();
+  g_sd_engine = acc_sd_brightness_engine_new (g_sd_monitors);
+  g_sd_service = acc_sd_service_new (g_sd_engine);
+
+  /* Forward engine state changes to D-Bus so the GNOME Shell adapter
+   * (Quick Settings, overlay) stays in sync with ASUSCraft. */
+  acc_sd_engine_on_brightness_changed (g_sd_engine,
+      [](gint index, gdouble brightness, gpointer user_data) {
+        (void) user_data;
+        if (g_sd_service)
+          acc_sd_service_notify_brightness (g_sd_service, index, brightness);
+      }, NULL);
+  acc_sd_engine_on_enabled_changed (g_sd_engine,
+      [](AccSdBrightnessEngine *engine, gboolean enabled, gpointer user_data) {
+        (void) engine; (void) user_data;
+        if (g_sd_service)
+          acc_sd_service_notify_enabled (g_sd_service, enabled);
+      }, NULL);
+  acc_sd_engine_on_status_changed (g_sd_engine,
+      [](AccSdBrightnessEngine *engine, AccSdStatus status, gpointer user_data) {
+        (void) engine; (void) status; (void) user_data;
+        if (g_sd_service)
+          acc_sd_service_notify_status (g_sd_service);
+      }, NULL);
+
   /* the local account decides between "create account", "sign in" and
    * straight-to-dashboard when the previous session is still signed in */
   acc_user_load ();
@@ -464,6 +500,23 @@ on_shutdown (GtkApplication *app, gpointer user)
       refresh_src = 0;
     }
   acc_brightness_shutdown ();
+
+  /* ── Soft Dimmer cleanup ── */
+  if (g_sd_service)
+    {
+      acc_sd_service_free (g_sd_service);
+      g_sd_service = NULL;
+    }
+  if (g_sd_engine)
+    {
+      acc_sd_brightness_engine_free (g_sd_engine);
+      g_sd_engine = NULL;
+    }
+  if (g_sd_monitors)
+    {
+      acc_sd_monitor_manager_free (g_sd_monitors);
+      g_sd_monitors = NULL;
+    }
 }
 
 /* `--check`: assertion tests for the pure logic behind hardware decisions.
