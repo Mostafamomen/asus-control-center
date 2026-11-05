@@ -72,6 +72,25 @@ install: $(BIN)
 	cd data && find soft-brightness-plus -type f -exec \
 	  install -Dm0644 {} $(DESTDIR)$(DATADIR)/asus-control-center/{} \;
 
+	# ── Soft Dimmer GNOME Shell extension ──
+	install -d $(DESTDIR)$(SD_EXT_DIR)
+	for f in $(SD_EXT_SRCS); do \
+	  install -Dm0644 $$f $(DESTDIR)$(SD_EXT_DIR)/; \
+	done
+	# Compile GSettings schemas for the extension (if schemas dir exists)
+	if [ -d gnome-extension/soft-dimmer/schemas ]; then \
+	  install -d $(DESTDIR)$(SD_EXT_DIR)/schemas; \
+	  find gnome-extension/soft-dimmer/schemas -name '*.gschema.xml' -exec \
+	    install -Dm0644 {} $(DESTDIR)$(SD_EXT_DIR)/schemas/ \; ; \
+	  if [ -x $(COMPILE_SCHEMAS) ]; then \
+	    $(COMPILE_SCHEMAS) $(DESTDIR)$(SD_EXT_DIR)/schemas || true; \
+	  fi; \
+	fi
+	# Enable the extension for the current user (best-effort, non-fatal)
+	if [ -x $(EXT_BIN) ]; then \
+	  $(EXT_BIN) enable $(SD_EXT_UUID) 2>/dev/null || true; \
+	fi
+
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BIN) \
 	      $(DESTDIR)$(LIBEXECDIR)/asus-control-center/acc-helper \
@@ -83,7 +102,22 @@ uninstall:
 	rm -rf $(DESTDIR)$(DATADIR)/asus-control-center
 	-rmdir $(DESTDIR)$(LIBEXECDIR)/asus-control-center
 
-# Source tarball used by the RPM and Debian builds.
+	# ── Soft Dimmer extension removal ──
+	if [ -x $(EXT_BIN) ]; then \
+	  $(EXT_BIN) disable $(SD_EXT_UUID) 2>/dev/null || true; \
+	fi
+	rm -rf $(DESTDIR)$(SD_EXT_DIR)
+
+# Soft Dimmer (ASUSCraft integrated) GNOME Shell extension
+SD_EXT_UUID   = soft-dimmer-asc@io.github.asuscraft
+SD_EXT_DIR    = $(DATADIR)/gnome-shell/extensions/$(SD_EXT_UUID)
+SD_EXT_SRCS   = gnome-extension/soft-dimmer/extension.js \
+                gnome-extension/soft-dimmer/dimmer.js \
+                gnome-extension/soft-dimmer/indicator.js \
+                gnome-extension/soft-dimmer/dbus_client.js \
+                gnome-extension/soft-dimmer/metadata.json
+EXT_BIN       ?= /usr/bin/gnome-extensions
+COMPILE_SCHEMAS ?= /usr/bin/glib-compile-schemas
 dist:
 	git archive --format=tar.gz --prefix=$(BIN)-$(VERSION)/ \
 	  -o $(BIN)-$(VERSION).tar.gz HEAD
