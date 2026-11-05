@@ -49,7 +49,6 @@ mc_card (void)
 {
   GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
   gtk_widget_add_css_class (box, "card");
-  gtk_widget_set_hexpand (box, TRUE);   /* cards expand to fill flow-box cell */
   return box;
 }
 
@@ -59,7 +58,6 @@ mc_panel (const gchar *title)
     * accent edge on the leading side (MyASUS "Device Settings" look) */
   GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_add_css_class (box, "accentcard");
-  gtk_widget_set_hexpand (box, TRUE);   /* panels expand to fill width */
   GtkWidget *h = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
   gtk_box_append (GTK_BOX (h), mc_title (title));
   gtk_box_append (GTK_BOX (h), mc_spacer ());

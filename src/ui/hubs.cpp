@@ -201,7 +201,6 @@ acc_page_hardware (AccUI *u)
     gtk_flow_box_set_column_spacing (GTK_FLOW_BOX (flow), 14);
     gtk_flow_box_set_max_children_per_line (GTK_FLOW_BOX (flow), 3);
     gtk_flow_box_set_min_children_per_line (GTK_FLOW_BOX (flow), 1);
-    gtk_widget_add_css_class (flow, "flowbox-wrap");
 
     /* Hardware overview */
     {

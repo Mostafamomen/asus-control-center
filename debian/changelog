@@ -1,3 +1,18 @@
+asus-control-center (1.2.4) unstable; urgency=medium
+
+  * Restore original ASUSCraft UI scaling design (fixed window size,
+    fixed sidebar width, original typography and spacing).
+  * Remove responsive breakpoints and auto-resize sidebar behavior.
+
+asus-control-center (1.2.3) unstable; urgency=medium
+
+  * Integrate Soft Dimmer as a native ASUSCraft feature (C++20 engine,
+    D-Bus service, native UI page, GNOME Shell adapter).
+  * Bidirectional brightness sync with GNOME Quick Settings via D-Bus.
+  * Presets, per-monitor dimming, diagnostics, smooth transitions.
+
+ -- Mostafa Momen <mostafamomen6521@gmail>  Thu, 05 Nov 2026 14:00:00 +0300
+
 asus-control-center (10.2) unstable; urgency=medium
 
   * Cross-DE support: GNOME 51 and KDE Plasma 6.8.
