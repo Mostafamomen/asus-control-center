@@ -59,10 +59,12 @@ static GtkListBox *g_nav = NULL;
 static GtkApplication *g_app = NULL;
 static GtkCssProvider *g_theme = NULL;
 
-/* collapsible sidebar: closed = icon rail, open = icons + text */
-#define SIDE_OPEN_W   250
-#define SIDE_CLOSED_W  68
-#define SIDE_MARK_PX   28
+/* collapsible sidebar: closed = icon rail, open = icons + text.
+ * Widths are expressed as a fraction of the window width via
+ * size_request with hexpand so they scale with DPI / window size. */
+#define SIDE_OPEN_FRAC   0.20   /* 20% of window width when open   */
+#define SIDE_CLOSED_W    72     /* fixed narrow rail when closed   */
+#define SIDE_MARK_PX     28
 static GtkWidget *g_side = NULL;        /* the sidebar box              */
 static GtkWidget *g_brandmark = NULL;   /* the drawn app mark           */
 static GtkWidget *g_uchip = NULL;       /* bottom user row              */
@@ -109,15 +111,36 @@ sidebar_save_pref (gboolean collapsed)
   g_free (p);
 }
 
-/* closed: icons only · open: icons + text */
+/* closed: icons only · open: icons + text.
+ * The open width is computed as a fraction of the current window width so
+ * the rail scales with DPI / window size (auto-scaling). */
 static void
 sidebar_apply (gboolean collapsed)
 {
   s_collapsed = collapsed;
 
   if (g_side)
-    gtk_widget_set_size_request (g_side,
-                                 collapsed ? SIDE_CLOSED_W : SIDE_OPEN_W, -1);
+  {
+    if (collapsed)
+      gtk_widget_set_size_request (g_side, SIDE_CLOSED_W, -1);
+    else
+    {
+      /* Compute open width as SIDE_OPEN_FRAC of the window allocation.
+       * Clamp to a sane minimum so the rail is always usable. */
+      gint w = gtk_widget_get_width (GTK_WIDGET (g_root));
+      gint h = gtk_widget_get_height (GTK_WIDGET (g_root));
+      (void) h;
+      if (w > 0)
+        {
+          gint open_w = (gint) ((gdouble) w * SIDE_OPEN_FRAC);
+          if (open_w < SIDE_CLOSED_W + 120)
+            open_w = SIDE_CLOSED_W + 120;
+          gtk_widget_set_size_request (g_side, open_w, -1);
+        }
+      else
+        gtk_widget_set_size_request (g_side, 220, -1);
+    }
+  }
   if (g_navlabels)
     for (guint i = 0; i < g_navlabels->len; i++)
       gtk_widget_set_visible ((GtkWidget *) g_ptr_array_index (g_navlabels, i),
@@ -441,7 +464,11 @@ acc_ui_boot (GtkApplication *app)
 
   g_root = GTK_WIDGET (adw_application_window_new (app));
   gtk_window_set_title (GTK_WINDOW (g_root), "ASUSCraft");
-  gtk_window_set_default_size (GTK_WINDOW (g_root), 1180, 760);
+  /* Auto-scaling: set a minimum size instead of a fixed default so the
+   * window can grow with the screen / DPI, but never shrink below a
+   * usable footprint. */
+  gtk_window_set_default_size (GTK_WINDOW (g_root), 1000, 650);
+  gtk_widget_set_size_request (GTK_WIDGET (g_root), 800, 500);
 
   ui = g_new0 (AccUI, 1);
 
@@ -607,7 +634,7 @@ acc_ui_boot (GtkApplication *app)
   GtkWidget *side = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_add_css_class (side, "acside");
   g_side = side;
-  gtk_widget_set_size_request (side, SIDE_OPEN_W, -1);
+  gtk_widget_set_size_request (side, 220, -1);
 
   GtkListBox *nav = GTK_LIST_BOX (gtk_list_box_new ());
   g_nav = nav;
@@ -735,9 +762,19 @@ acc_ui_boot (GtkApplication *app)
 
   /* every widget exists now: apply the saved sidebar state once */
   sidebar_apply (s_collapsed);
+
+  /* Recompute the open sidebar width whenever the window is resized so
+   * the rail scales with the window (auto-scaling). */
+  g_signal_connect (g_root, "size-allocate", G_CALLBACK (+[](GtkWidget *w,
+      GdkRectangle *allocation, gpointer user_data) {
+    (void) w; (void) allocation; (void) user_data;
+    if (!s_collapsed)
+      sidebar_apply (FALSE);
+  }), NULL);
+
   if (g_getenv ("ACC_DEBUG"))
     g_printerr ("sidebar: collapsed=%d width=%d\n",
-                s_collapsed, s_collapsed ? SIDE_CLOSED_W : SIDE_OPEN_W);
+                s_collapsed, s_collapsed ? SIDE_CLOSED_W : 220);
 
   acc_ui_refresh ();
 }

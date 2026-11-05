@@ -1,25 +1,14 @@
 /* ==========================================================================
-   ACC theme (light) - MyASUS 4 look for GTK4 / libadwaita
+   Auto-scaling / responsive breakpoints
    --------------------------------------------------------------------------
-   Layout   Windows 11 style shell, as in MyASUS 4: one light-grey chrome
-            (title bar + navigation rail on the same colour, no dividers),
-            the pages sit on a raised panel with a rounded top-left corner,
-            raised cards with 8 px corners and hairline borders,
-            pill-shaped blue buttons.
-   Type     Segoe UI (the face MyASUS renders with on Windows), falling
-            back to Inter / Noto Sans / Cantarell on Linux. Regular body,
-            semibold (600) titles - no heavy 800 weights.
-   Palette  chrome #F3F3F3   panel #F9F9F9   card #FFFFFF   border #E5E5E5
-            text #1A1A1A   secondary #616161   accent #006CE1
-            accent fill #006CE1 / hover #1A7DE8
-            success #107C10   warning #F59E0B   danger #C42B1C
-   MyASUS-inspired; not an official ASUS spec and ships no ASUS artwork.
-   Both skins share one layout: keep theme.css and
-   theme-dark.css in step (same selectors, different colours).
-   Project asset, GPL-3.0-or-later.
+   The layout adapts to window width and DPI:
+     • < 900px : compact single-column, smaller fonts/tight padding
+     • 900-1200px : default desktop layout
+     • > 1200px : spacious layout, slightly larger fonts
+   All breakpoints respect the user's GTK font-scale setting.
    ========================================================================== */
 
-/* ============ type ============ */
+/* Base: moderate sizes that scale with the system font setting */
 window, popover, dialog {
   font-family: "Segoe UI Variable Text", "Segoe UI", "Inter",
                "Noto Sans", "Cantarell", sans-serif;
@@ -648,3 +637,100 @@ scrollbar slider:hover { background: #7B909E; }
 
 /* PC Health Check: warning status */
 .pill.bad { background: rgba(196, 43, 28, 0.10); color: #C42B1C; }
+
+/* ==========================================================================
+   Responsive breakpoints — auto-scaling for window width and DPI
+   ========================================================================== */
+
+/* ---- Compact: narrow windows / small screens (< 900px) ---- */
+@media (max-width: 899px) {
+  .pagehead { padding: 12px 14px 6px 14px; }
+  .eyebrow { font-size: 10px; }
+  .pagetitle { font-size: 22px; }
+  .pagesub { font-size: 12px; }
+
+  .card, .accentcard, .tile, .chipbox, .featcard {
+    padding: 12px 14px; border-radius: 12px;
+  }
+  .cardtitle { font-size: 14px; }
+  .dim { font-size: 11px; }
+  .val { font-size: 13px; }
+  .foot { font-size: 10px; }
+
+  .hero-title { font-size: 20px; }
+  .hero-sub { font-size: 12px; }
+
+  button.primarybtn { padding: 7px 16px; font-size: 12px; }
+  button.actionbtn { padding: 6px 14px; font-size: 12px; }
+  checkbutton.optcard { min-height: 30px; padding: 6px 12px; font-size: 12px; }
+  checkbutton.optcard.compact { min-width: 70px; min-height: 26px; font-size: 11px; }
+
+  button.hubtab { padding: 6px 12px; font-size: 12px; }
+  .hubbar { padding: 3px; gap: 4px; }
+
+  .tileval { font-size: 24px; }
+  .tilehead { font-size: 12px; }
+  .tilesub { font-size: 11px; }
+
+  .langpill { padding: 3px 12px; font-size: 11px; }
+
+  headerbar { min-height: 44px; }
+  .appbrand { font-size: 14px; }
+
+  /* Flow boxes: allow 2 columns on narrow screens */
+  flowbox { column-spacing: 10px; row-spacing: 10px; }
+
+  .pill { padding: 1px 10px; font-size: 10px; }
+
+  .diagreport { font-size: 11px; padding: 10px 12px; }
+
+  .achero { padding: 20px 22px; border-radius: 16px; }
+  .achero .hero-title { font-size: 20px; }
+}
+
+/* ---- Desktop: default layout (900–1200px) — base rules above ---- */
+
+/* ---- Spacious: large windows (> 1200px) ---- */
+@media (min-width: 1201px) {
+  .pagetitle { font-size: 30px; }
+  .pagesub { font-size: 14px; }
+
+  .cardtitle { font-size: 16px; }
+  .val { font-size: 14px; }
+
+  .tileval { font-size: 32px; }
+
+  button.primarybtn { padding: 10px 24px; font-size: 14px; }
+
+  .hero-title { font-size: 30px; }
+
+  /* Allow up to 4 columns on very wide screens */
+  flowbox { column-spacing: 18px; row-spacing: 18px; }
+}
+
+/* ---- High DPI / large font scaling: respect GTK font-scale ---- */
+@media (resolution: >= 144dpi) {
+  .pagetitle { font-size: 28px; }
+  .cardtitle { font-size: 16px; }
+  .hero-title { font-size: 26px; }
+  .tileval { font-size: 30px; }
+  button.primarybtn { font-size: 14px; }
+  checkbutton.optcard { min-height: 38px; }
+  button.hubtab { font-size: 14px; }
+  .acnav > row label { font-size: 15px; }
+  .navgroup { font-size: 13px; }
+  .userchip label { font-size: 14px; }
+}
+
+/* Ensure flow boxes wrap and cards expand to fill available width */
+.flowbox-wrap {
+  column-spacing: 14px;
+  row-spacing: 14px;
+}
+
+/* Pages should fill their container */
+.pagepanel { min-height: 0; }
+
+/* Header bar title area: allow the model text to ellipsize nicely */
+.hbtitle { min-width: 0; }
+.hbsub { min-width: 0; }
