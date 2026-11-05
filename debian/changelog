@@ -1,3 +1,53 @@
+asus-control-center (1.2.4) unstable; urgency=medium
+
+  * Restore original ASUSCraft UI scaling design (fixed window size,
+    fixed sidebar width, original typography and spacing).
+  * Remove responsive breakpoints and auto-resize sidebar behavior.
+
+asus-control-center (1.2.3) unstable; urgency=medium
+
+  * Integrate Soft Dimmer as a native ASUSCraft feature (C++20 engine,
+    D-Bus service, native UI page, GNOME Shell adapter).
+  * Bidirectional brightness sync with GNOME Quick Settings via D-Bus.
+  * Presets, per-monitor dimming, diagnostics, smooth transitions.
+
+ -- Mostafa Momen <mostafamomen6521@gmail>  Thu, 05 Nov 2026 14:00:00 +0300
+
+asus-control-center (10.2) unstable; urgency=medium
+
+  * Cross-DE support: GNOME 51 and KDE Plasma 6.8.
+  * Night-light toggle backed by GNOME settings-daemon or KDE kwinrc/KWin DBus.
+  * Touchpad enable/disable via GNOME gsettings or xinput (KDE/Wayland fallback).
+  * Desktop-environment probe (desktop.cpp) cached at startup.
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Tue, 04 Nov 2026 10:56:00 +0300
+
+asus-control-center (1.0.0) unstable; urgency=medium
+
+  * System Manager: health overview, CPU/RAM monitoring, Smart Recommendations,
+    Quick Actions, health history.
+  * Software Center: installed apps, pending updates, driver and diagnostics.
+  * Fix memory leak in health-history directory creation.
+  * Fix stale helper exit code on spawn failure.
+  * Fix health_history.txt file permissions (0600).
+  * Fix dead code in autostart scanner (system entries now counted).
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Mon, 03 Nov 2026 12:00:00 +0300
+
+asus-control-center (0.9.0) unstable; urgency=medium
+
+  * System Manager and Software Center pages added.
+  * System Diagnosis: Hardware and Software check groups expanded.
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Sun, 02 Nov 2026 22:00:00 +0300
+
+asus-control-center (0.6.0) unstable; urgency=medium
+
+  * GPU: fix MUX double-write, verify switch after reboot.
+  * Integrated (Intel Arc) shown unavailable with the reason.
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Mon, 02 Nov 2026 15:30:00 +0300
+
 asus-control-center (0.4.0) unstable; urgency=medium
 
   * First packaged release: RPM and Debian packages.

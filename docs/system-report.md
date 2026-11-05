@@ -14,7 +14,7 @@ conclusion: **what this machine exposes, and where each item lives in the app.**
 
 ```text
 ==========================================================
-  ASUS Control Center — laptop report (read-only)
+  ASUSCraft — laptop report (read-only)
 ==========================================================
 
 DEVICE

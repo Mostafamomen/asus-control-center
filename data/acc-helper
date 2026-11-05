@@ -5,9 +5,15 @@
 # No eval, no command substitution into a command line: the device paths
 # are discovered read-only and then used only as an output redirection
 # target. Exit codes: 0 ok, 4 firmware refused the value, 2 disallowed
-# value, 1 disallowed action, 3 modules still in use.
+# value, 1 disallowed action, 5 MUX written but not confirmed.
 
 set -u
+
+# --- security: validate argument count -------------------------------------
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+  echo "usage: $0 <action> [value]" >&2
+  exit 1
+fi
 
 # --- portable device discovery (read-only) --------------------------------
 # Models differ in battery name (BAT0/BAT1/BATT), charge-limit file name and
@@ -41,7 +47,13 @@ charge_limit_file() {
 # firmware-attribute class. The old platform files may still exist but be
 # read-only or a dead alias, so the armoury copy always wins.
 armoury_file() {
-  local f="/sys/class/firmware-attributes/asus-armoury/attributes/$1/current_value"
+  local name="$1"
+  # Only allow known firmware attribute names (defense in depth)
+  case "$name" in
+    charge_mode|gpu_mux_mode) ;;
+    *) return 1 ;;
+  esac
+  local f="/sys/class/firmware-attributes/asus-armoury/attributes/$name/current_value"
   [ -e "$f" ] && { printf '%s\n' "$f"; return 0; }
   return 1
 }
@@ -59,12 +71,6 @@ wmi_file() {
   local name="$1" base
   armoury_file "$name" && return 0
   for base in /sys/devices/platform/asus-nb-wmi /sys/devices/platform/asus-wmi; do
-    if [ -e "$base/$name" ]; then
-      printf '%s\n' "$base/$name"
-      return 0
-    fi
-  done
-  for base in /sys/devices/platform/asus*; do
     if [ -e "$base/$name" ]; then
       printf '%s\n' "$base/$name"
       return 0
@@ -111,11 +117,20 @@ case "$1" in
       *) exit 2 ;;
     esac ;;
 
-  # gpu mux mode (1 hybrid, 0 ultimate/dGPU-only) — needs reboot
+  # gpu mux mode (1 hybrid, 0 ultimate/dGPU-only) — needs reboot.
+  # The firmware keeps reporting the RUNNING mode until the next boot, so a
+  # read-back cannot confirm an accepted MUX write (on the N6506CU it never
+  # matches). A failed write (-EIO) is the firmware refusing it; a write
+  # that went through is confirmed by the value or by pending_reboot.
+  # Exit 5 = written, but the firmware did not confirm it.
   set-gpu-mux)
     case "$2" in
       0|1) f=$(wmi_file gpu_mux_mode) || exit 1
-           set_val "$f" "$2" || exit 4 ;;
+           echo "$2" > "$f" 2>/dev/null || exit 4
+           [ "$(cat "$f" 2>/dev/null)" = "$2" ] && exit 0
+           p=/sys/class/firmware-attributes/asus-armoury/attributes/pending_reboot
+           [ "$(cat "$p" 2>/dev/null)" = "1" ] && exit 0
+           exit 5 ;;
       *) exit 2 ;;
     esac ;;
 

@@ -20,6 +20,12 @@ void        acc_theme_save_pref (gboolean dark);
 gboolean    acc_theme_gray_pref (void);
 void        acc_theme_save_gray (gboolean gray);
 
+/* App preferences shared by the settings page and the toast layer */
+gboolean    acc_pref_notifications (void);
+void        acc_pref_set_notifications (gboolean on);
+gboolean    acc_autostart_enabled (void);
+gboolean    acc_autostart_set (gboolean on, gchar **err);
+
 /* absolute path of the stylesheet matching the current mode */
 gchar      *acc_theme_css_path (void);
 

@@ -55,6 +55,7 @@ headerbar {
   min-height: 44px;
 }
 headerbar button { color: #1A1A1A; }
+.appbrand { font-weight: 700; font-size: 15px; color: #1A1A1A; }
 
 /* ============ sidebar / navigation rail ============ */
 .acside {
@@ -468,3 +469,182 @@ button.suprow:hover .supkey { color: #006CE1; }
 .nvlogo.brand-nvidia { border-color: rgba(118, 185, 0, 0.7); }
 .nvlogo.brand-amd    { border-color: rgba(237, 28, 36, 0.65); }
 .nvlogo.brand-intel  { border-color: rgba(15, 125, 194, 0.65); }
+
+/* ==========================================================================
+   ASUSCraft identity (light)
+   --------------------------------------------------------------------------
+   Cyan/teal accent, deeper cards, softer radii and a dark "device hero".
+   These rules intentionally come last so they refine the MyASUS-inspired
+   base without changing any selector contract used by the UI kit.
+   ========================================================================== */
+
+window.background, .accroot { background: #EDF2F6; color: #0B1722; }
+
+headerbar {
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid #DCE7EF;
+  min-height: 50px;
+}
+headerbar button { color: #0B1722; }
+.appbrand { color: #0B1722; font-weight: 800; letter-spacing: 0.2px; }
+.hbsub { color: #5C7382; font-weight: 600; }
+
+.acside { background: #FFFFFF; border-right: 1px solid #E3ECF3; }
+.acnav > row {
+  border-radius: 11px; margin: 3px 10px; min-height: 42px;
+}
+.acnav > row:hover { background: rgba(8, 145, 178, 0.08); }
+.acnav > row:selected {
+  background: linear-gradient(90deg, rgba(8, 145, 178, 0.16),
+                                      rgba(8, 145, 178, 0.05));
+  box-shadow: inset 3px 0 0 0 #0891B2;
+  border-radius: 11px;
+}
+.acnav > row:selected image { color: #0891B2; }
+.navgroup { color: #7B909E; letter-spacing: 0.7px; font-size: 11px; }
+.userchip { border-top: 1px solid #E3ECF3; }
+.userchip image { color: #0891B2; }
+
+.pagepanel {
+  background: #F7FAFC;
+  border-top: 1px solid #E3ECF3;
+  border-left: 1px solid #E3ECF3;
+  border-top-left-radius: 18px;
+}
+
+.pagehead {
+  padding: 22px 22px 10px 22px;
+}
+.eyebrow {
+  color: #0891B2; font-size: 11px; font-weight: 800;
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+.pagetitle { color: #0B1722; font-size: 27px; font-weight: 800; }
+.pagesub { color: #5C7382; font-size: 13px; }
+.pageicon {
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(4, 43, 58, 0.20);
+}
+
+.hubbar {
+  background: #E9F1F6; border-radius: 13px; padding: 4px;
+}
+button.hubtab {
+  background: transparent; border: none; box-shadow: none;
+  border-radius: 10px; padding: 8px 16px;
+  color: #5C7382; font-weight: 600; font-size: 13px;
+}
+button.hubtab:hover { background: rgba(255, 255, 255, 0.72); color: #0B1722; }
+button.hubtab:checked {
+  background: #FFFFFF; color: #067792;
+  box-shadow: 0 2px 8px rgba(16, 42, 67, 0.12);
+}
+
+/* cards: softer, larger radius, a little more air */
+.card, .accentcard, .tile, .chipbox, .featcard {
+  border-radius: 16px;
+  border: 1px solid #DCE7EF;
+  box-shadow: 0 2px 10px rgba(16, 42, 67, 0.055);
+}
+.card { padding: 18px 20px; }
+.accentcard { padding: 22px 24px; }
+.cardtitle { font-size: 15px; font-weight: 700; }
+.cardicon { color: #0891B2; }
+.dim { color: #5C7382; }
+.val { color: #0B1722; }
+.foot { color: #6B8190; }
+.overline { color: #7B909E; letter-spacing: 0.8px; font-size: 11px; }
+
+/* the device hero is intentionally dark in both skins */
+.achero {
+  background-image: linear-gradient(118deg, #07131C 0%, #0B2B38 58%, #0A4550 100%);
+  border: none;
+  border-radius: 22px;
+  box-shadow: 0 14px 34px rgba(5, 35, 48, 0.22);
+  padding: 26px 28px;
+}
+.achero .hero-title { color: #F4FDFF; }
+.achero .hero-sub, .achero .foot { color: rgba(219, 243, 248, 0.74); }
+.achero .serialval { color: #F4FDFF; }
+.achero .featcard {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(130, 235, 248, 0.20);
+  border-radius: 14px;
+}
+.achero .featcard .overline { color: rgba(219, 243, 248, 0.68); }
+.achero button.featrow label { color: #F4FDFF; }
+.achero button.featrow:hover { background: rgba(255, 255, 255, 0.10); }
+.achero button.featrow image,
+.achero button.featrow:hover image { color: #7AE8F5; }
+.achero button.actionbtn,
+.achero button.primarybtn {
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(126, 235, 248, 0.34);
+  color: #E9FDFF;
+}
+.achero button.actionbtn:hover,
+.achero button.primarybtn:hover { background: rgba(255, 255, 255, 0.18); }
+
+button.primarybtn {
+  background: #0891B2; border-radius: 12px; padding: 9px 20px;
+  font-size: 13px; font-weight: 700;
+  box-shadow: 0 3px 10px rgba(8, 145, 178, 0.22);
+}
+button.primarybtn:hover { background: #06A7CC; }
+button.primarybtn:active { background: #067792; }
+button.primarybtn:disabled { background: #DCE7EF; color: #7B909E; box-shadow: none; }
+
+button.actionbtn {
+  border-radius: 12px; border-color: #CFE0EA;
+  color: #067792; padding: 7px 15px;
+}
+button.actionbtn:hover { background: #E8F8FB; border-color: #0891B2; }
+button.langpill { border-radius: 11px; border-color: #DCE7EF; }
+button.langpill:hover { background: #E8F8FB; }
+
+checkbutton.optcard { border-radius: 12px; border-color: #DCE7EF; }
+checkbutton.optcard:hover:not(:disabled) { background: #F1F8FB; border-color: #9DB6C4; }
+checkbutton.optcard:checked {
+  background: #E4F8FB; border-color: #0891B2; color: #056B84;
+  box-shadow: inset 0 0 0 1px #0891B2;
+}
+
+scale trough, progressbar trough { background: #DCE7EF; }
+scale highlight, progressbar progress { background: #0891B2; }
+scale slider {
+  background: #0891B2;
+  box-shadow: 0 0 0 4px #FFFFFF, 0 0 0 5px #CFE0EA;
+}
+switch:checked { background: #0891B2; }
+
+.pill { background: #E4F8FB; color: #067792; }
+.pill.on { background: rgba(16, 124, 16, 0.11); color: #107C10; }
+.pill.soon { background: rgba(245, 158, 11, 0.14); color: #8A5300; }
+.pill.off { background: #EDF2F6; color: #6B8190; }
+
+.iconbadge { background: #E4F8FB; border-radius: 11px; }
+.iconbadge image { color: #067792; }
+.nvlogo { border-radius: 12px; }
+.notice { border-radius: 12px; }
+.notice.info { background: #E4F8FB; border-color: #BDEAF2; }
+.notice.info .noticehead { color: #067792; }
+
+.diagreport {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px; color: #18313E;
+  background: #F1F8FB; border: 1px solid #DCE7EF;
+  border-radius: 12px; padding: 14px 16px;
+}
+.warncare { color: #A15C00; }
+
+scrollbar slider { background: #C7D8E3; }
+scrollbar slider:hover { background: #7B909E; }
+
+/* footer: quiet brand line, no fake ASUS wordmark */
+.footbar { background: #EDF2F6; border-top: 1px solid #E3ECF3; }
+.footbar .asusword { color: #0891B2; font-style: normal; letter-spacing: 0.3px; }
+.footbar .slogan, .footbar .leaf { color: #7B909E; }
+.apptagline { color: #7B909E; font-size: 9.5px; font-weight: 600; letter-spacing: 0.2px; }
+
+/* PC Health Check: warning status */
+.pill.bad { background: rgba(196, 43, 28, 0.10); color: #C42B1C; }

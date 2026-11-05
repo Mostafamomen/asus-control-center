@@ -8,14 +8,21 @@
 #include "i18n/i18n.h"
 #include "ui/window.h"
 #include "ui/home.h"
+#include "ui/sysmgr.h"
 #include "ui/login.h"
 #include "user/user.h"
 #include "control/backlight.h"
 #include "control/brightness.h"
 #include "control/asusd.h"
 #include "control/gfx.h"
+#include "control/muxreq.h"
 #include "control/softdim.h"
+#include "control/nightlight.h"
+#include "control/softdimmer/brightness_engine.h"
+#include "control/softdimmer/monitor_manager.h"
+#include "control/softdimmer/softdimmer_service.h"
 #include "probe/probe.h"
+#include "probe/desktop.h"
 #include "probe/devs.h"
 #include "probe/battery.h"
 #include "probe/dmi.h"
@@ -27,6 +34,13 @@
 #define APP_ID "io.github.asuscontrolcenter.AsusControlCenter"
 
 static guint refresh_src = 0;
+
+/* Soft Dimmer engine + D-Bus service (owned by the application, created
+ * at startup so the GNOME Shell adapter can connect even before the user
+ * opens the Soft Dimmer page). */
+AccSdBrightnessEngine *g_sd_engine = NULL;
+AccSdMonitorManager   *g_sd_monitors = NULL;
+AccSdSoftDimmerService *g_sd_service = NULL;
 
 static gboolean
 refresh_tick (gpointer user)
@@ -105,7 +119,7 @@ self_test (void)
   acc_brightness_init (NULL, NULL);   /* for the OLED dim availability line */
 
   g_print ("==========================================================\n");
-  g_print ("  ASUS Control Center — laptop report (read-only)\n");
+  g_print ("  ASUSCraft — laptop report (read-only)\n");
   g_print ("==========================================================\n");
 
   /* ---------------- device ---------------- */
@@ -344,13 +358,19 @@ self_test (void)
   }
   {
     AccGfxState gx;
-    gboolean up = acc_gfx_state_sync (&gx);
-    r_cap (up && gx.can_integrated, "iGPU only (supergfxd)",
-           !gx.installed ? "supergfxctl not installed"
-           : !up ? "supergfxd not running"
-           : !gx.can_integrated ? "Integrated not offered"
-           : gx.mode == ACC_GFX_INTEGRATED ? "Integrated (active)"
-           : "Integrated available, finishes at logout");
+    acc_gfx_state (&gx);
+    r_cap (acc_gfx_integrated_supported (&gx), "Integrated (iGPU only)",
+           gx.has_dgpu_disable ? "dgpu_disable present, not verified on this model"
+                               : "no firmware dGPU switch (dgpu_disable)");
+    r_cap (gx.pm == ACC_DGPU_PM_SUSPENDED, "dGPU runtime power",
+           gx.pm == ACC_DGPU_PM_SUSPENDED ? "suspended (D3)"
+           : gx.pm == ACC_DGPU_PM_ACTIVE ? (gx.holders[0] ? gx.holders : "active")
+           : "unknown");
+    if (gx.supergfxd_running)
+      r_cap (FALSE, "supergfxd", "running (can conflict with asusd)");
+    if (gx.supergfx_leftover)
+      r_cap (FALSE, "supergfxd leftover",
+             "/etc/modprobe.d/supergfxd.conf blacklists nvidia");
   }
   {
     gchar *kbd = acc_dev_kbd_led_file ();
@@ -392,14 +412,9 @@ self_test (void)
     g_free (d2);
   }
   {
-    GSettingsSchemaSource *ss = g_settings_schema_source_get_default ();
-    GSettingsSchema *sch = ss
-      ? g_settings_schema_source_lookup
-          (ss, "org.gnome.settings-daemon.plugins.color", TRUE) : NULL;
-    r_cap (sch != NULL, "Night light",
-           sch ? "GSettings available" : "schema not installed");
-    if (sch)
-      g_settings_schema_unref (sch);
+    gboolean nl = acc_nightlight_available ();
+    r_cap (nl, "Night light / Night color",
+           nl ? "backend available" : "no supported backend on this DE");
   }
   {
     gboolean ok = g_file_test ("/usr/libexec/asus-control-center/acc-helper",
@@ -428,6 +443,32 @@ on_activate (GtkApplication *app, gpointer user)
 
   /* user-level GSettings bridge for the OLED flicker-free dim slider */
   acc_brightness_init (NULL, NULL);
+
+  /* ── Soft Dimmer engine + D-Bus service ── */
+  g_sd_monitors = acc_sd_monitor_manager_new ();
+  g_sd_engine = acc_sd_brightness_engine_new (g_sd_monitors);
+  g_sd_service = acc_sd_service_new (g_sd_engine);
+
+  /* Forward engine state changes to D-Bus so the GNOME Shell adapter
+   * (Quick Settings, overlay) stays in sync with ASUSCraft. */
+  acc_sd_engine_on_brightness_changed (g_sd_engine,
+      [](gint index, gdouble brightness, gpointer user_data) {
+        (void) user_data;
+        if (g_sd_service)
+          acc_sd_service_notify_brightness (g_sd_service, index, brightness);
+      }, NULL);
+  acc_sd_engine_on_enabled_changed (g_sd_engine,
+      [](AccSdBrightnessEngine *engine, gboolean enabled, gpointer user_data) {
+        (void) engine; (void) user_data;
+        if (g_sd_service)
+          acc_sd_service_notify_enabled (g_sd_service, enabled);
+      }, NULL);
+  acc_sd_engine_on_status_changed (g_sd_engine,
+      [](AccSdBrightnessEngine *engine, AccSdStatus status, gpointer user_data) {
+        (void) engine; (void) status; (void) user_data;
+        if (g_sd_service)
+          acc_sd_service_notify_status (g_sd_service);
+      }, NULL);
 
   /* the local account decides between "create account", "sign in" and
    * straight-to-dashboard when the previous session is still signed in */
@@ -459,18 +500,120 @@ on_shutdown (GtkApplication *app, gpointer user)
       refresh_src = 0;
     }
   acc_brightness_shutdown ();
+
+  /* ── Soft Dimmer cleanup ── */
+  if (g_sd_service)
+    {
+      acc_sd_service_free (g_sd_service);
+      g_sd_service = NULL;
+    }
+  if (g_sd_engine)
+    {
+      acc_sd_brightness_engine_free (g_sd_engine);
+      g_sd_engine = NULL;
+    }
+  if (g_sd_monitors)
+    {
+      acc_sd_monitor_manager_free (g_sd_monitors);
+      g_sd_monitors = NULL;
+    }
+}
+
+/* `--check`: assertion tests for the pure logic behind hardware decisions.
+ * No hardware is touched; returns the number of failures. */
+static int s_fail = 0;
+
+static void
+expect (gboolean ok, const gchar *what)
+{
+  g_print ("  %s %s\n", ok ? "PASS" : "FAIL", what);
+  if (!ok)
+    s_fail++;
+}
+
+static int
+unit_checks (void)
+{
+  const gchar *b1 = "11111111-2222-3333-4444-555555555555";
+  const gchar *b2 = "aaaaaaaa-2222-3333-4444-555555555555";
+
+  g_print ("MUX request lifecycle\n");
+  expect (acc_muxreq_classify (0, b1, b1, 1) == ACC_MUXREQ_PENDING,
+          "same boot is pending, even though the live value differs");
+  expect (acc_muxreq_classify (0, b1, b2, 0) == ACC_MUXREQ_VERIFIED,
+          "later boot running the requested mode is verified");
+  expect (acc_muxreq_classify (0, b1, b2, 1) == ACC_MUXREQ_FAILED,
+          "later boot still in the old mode is failed");
+  expect (acc_muxreq_classify (1, b1, b2, -1) == ACC_MUXREQ_NONE,
+          "unknown live value claims nothing");
+  expect (acc_muxreq_classify (2, b1, b2, 1) == ACC_MUXREQ_NONE,
+          "out-of-range request is ignored");
+  expect (acc_muxreq_classify (1, NULL, b2, 1) == ACC_MUXREQ_NONE,
+          "record without a boot id is ignored");
+
+  g_print ("MUX failure reason from the journal\n");
+  const gchar *log =
+    "[INFO  asus_shutdown] Applying deferred GPU attribute gpu_mux_mode = 0\n"
+    "asus_armoury: Failed to set current_value: (result): 0x0\n"
+    "[ERROR asusd::asus_armoury] Could not apply queued GPU attribute "
+    "gpu_mux_mode = 0: Io(Os { code: 5 })\n";
+  gchar *r = acc_muxreq_reason_from_log (log);
+  expect (r && g_str_has_prefix (r, "[ERROR asusd::asus_armoury] Could not"),
+          "asusd's line wins over the kernel line");
+  g_free (r);
+  r = acc_muxreq_reason_from_log ("asus_armoury: Failed to set current_value: (result): 0x0\n");
+  expect (r && strstr (r, "Failed to set current_value"),
+          "kernel line is used when asusd said nothing");
+  g_free (r);
+  r = acc_muxreq_reason_from_log ("gpu_mux_mode changed\n");
+  expect (r == NULL, "no failure line gives no reason");
+  g_free (r);
+  expect (acc_muxreq_reason_from_log (NULL) == NULL, "NULL log is safe");
+
+  g_print ("supergfxd leftover detection\n");
+  expect (acc_gfx_text_blacklists_nvidia ("# Automatically generated by supergfxd\n"
+                                          "blacklist nouveau\nblacklist nvidia_drm\n"
+                                          "blacklist nvidia\n"),
+          "supergfxd's Integrated file blacklists nvidia");
+  expect (!acc_gfx_text_blacklists_nvidia ("blacklist nouveau\noptions nvidia-drm modeset=1\n"),
+          "nouveau-only blacklist is not an nvidia blacklist");
+  expect (!acc_gfx_text_blacklists_nvidia ("blacklist nvidia_drm\n"),
+          "nvidia_drm alone does not count");
+  expect (acc_gfx_text_blacklists_nvidia ("  blacklist\tnvidia  \n"),
+          "whitespace variants are recognised");
+  expect (!acc_gfx_text_blacklists_nvidia (NULL), "NULL text is safe");
+
+  g_print ("Integrated mode is never offered unverified\n");
+  AccGfxState st;
+  memset (&st, 0, sizeof st);
+  st.has_dgpu_disable = TRUE;
+  expect (!acc_gfx_integrated_supported (&st),
+          "an unverified dgpu_disable attribute is not used");
+
+  g_print ("\n%d failure(s)\n", s_fail);
+  return s_fail;
 }
 
 int
 main (int argc, char **argv)
 {
+  if (argc > 1 && (strcmp (argv[1], "--version") == 0
+                   || strcmp (argv[1], "-v") == 0))
+    {
+      g_print ("asuscraft %s\n", ACC_VERSION);
+      return 0;
+    }
+
+  if (argc > 1 && strcmp (argv[1], "--check") == 0)
+    return unit_checks () ? 1 : 0;
+
   if (argc > 1 && (strcmp (argv[1], "--self-test") == 0
                    || strcmp (argv[1], "--specs") == 0))
     {
       self_test ();
       acc_brightness_shutdown ();
-      /* non-zero so `make test` fails when the sign-in crypto is broken */
-      return acc_user_selftest () ? 0 : 1;
+      /* non-zero so `make test` fails when the sign-in crypto or System Manager self-test is broken */
+      return (acc_user_selftest () && acc_sysmgr_selftest ()) ? 0 : 1;
     }
 
   /* arabic is the default language of the project */

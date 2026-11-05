@@ -23,8 +23,10 @@ acc_ctl_helper_stale (void)
   gchar *txt = NULL;
   if (!g_file_get_contents (HELPER, &txt, NULL, NULL) || !txt)
     return FALSE;
-  /* helper v2 introduced the asus-armoury path + read-back verification */
-  gboolean stale = strstr (txt, "armoury_file") == NULL;
+  /* helper v2 introduced the asus-armoury path + read-back verification;
+   * v3 confirms MUX writes by pending_reboot (exit 5 = unconfirmed) */
+  gboolean stale = strstr (txt, "armoury_file") == NULL
+                   || strstr (txt, "pending_reboot") == NULL;
   g_free (txt);
   return stale;
 }
@@ -34,6 +36,25 @@ acc_ctl_run (const gchar *action, const gchar *arg, gchar **err)
 {
   if (err)
     *err = NULL;
+
+  /* Validate action against whitelist before touching pkexec */
+  static const gchar *allowed_actions[] = {
+    "set-perf", "set-charge", "set-charge-mode",
+    "set-gpu-mux", "set-kbd", NULL
+  };
+  gboolean action_ok = FALSE;
+  if (action)
+    for (int i = 0; allowed_actions[i]; i++)
+      if (g_strcmp0 (allowed_actions[i], action) == 0)
+        { action_ok = TRUE; break; }
+
+  if (!action_ok || !arg || !*arg)
+    {
+      if (err)
+        *err = g_strdup ("invalid action or argument");
+      return FALSE;
+    }
+
   if (!acc_ctl_available ())
     {
       if (err)
@@ -49,13 +70,14 @@ acc_ctl_run (const gchar *action, const gchar *arg, gchar **err)
 
   if (!p)
     {
+      s_last_exit = -1;
       if (err)
         *err = g_strdup (e ? e->message : "spawn failed");
       g_clear_error (&e);
       return FALSE;
     }
 
-  gboolean ok = g_subprocess_wait_check (p, NULL, &e) ;
+  gboolean ok = g_subprocess_wait_check (p, NULL, &e);
   /* remember how it ended: helper exit codes carry the reason
    * (3 = modules in use), pkexec returns 127 when auth is dismissed */
   s_last_exit = g_subprocess_get_exit_status (p) & 0xff;
