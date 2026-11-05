@@ -358,11 +358,13 @@ acc_page_softdimmer (AccUI *u)
     SdPage *p = g_new0 (SdPage, 1);
     g_sd = p;
 
-    p->engine = acc_sd_brightness_engine_new (NULL);
-    p->monitors = acc_sd_monitor_manager_new ();
-    p->service = acc_sd_service_new (p->engine);
+    /* Use the application-owned engine/monitors/service (created in main.cpp). */
+    p->engine = g_sd_engine;
+    p->monitors = g_sd_monitors;
+    p->service = g_sd_service;
 
-    /* Engine callbacks. */
+    /* Engine callbacks (D-Bus forwarding already connected in main.cpp;
+     * these just refresh the UI). */
     p->brightness_handler =
         acc_sd_engine_on_brightness_changed (p->engine,
             sd_on_brightness_changed, p);
@@ -412,7 +414,7 @@ acc_page_softdimmer (AccUI *u)
 
             /* Enable/disable switch. */
             GtkWidget *sw_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-            GtkWidget *sw_lab = gtk_label_new ("Enable soft dimming");
+            GtkWidget *sw_lab = gtk_label_new (acc_tr (ACC_T_SD_ENABLE));
             gtk_widget_add_css_class (sw_lab, "dim");
             gtk_box_append (GTK_BOX (sw_row), sw_lab);
             p->enable_switch = gtk_switch_new ();
@@ -446,7 +448,7 @@ acc_page_softdimmer (AccUI *u)
             GtkWidget *fill = gtk_label_new (NULL);
             gtk_widget_set_hexpand (fill, TRUE);
             gtk_box_append (GTK_BOX (st_row), fill);
-            GtkWidget *reset_btn = gtk_button_new_with_label ("Reset");
+            GtkWidget *reset_btn = gtk_button_new_with_label (acc_tr (ACC_T_SD_RESET));
             gtk_widget_add_css_class (reset_btn, "actionbtn");
             g_signal_connect (reset_btn, "clicked", G_CALLBACK (+[](GtkButton *,
                 gpointer d) {
@@ -476,8 +478,8 @@ acc_page_softdimmer (AccUI *u)
         }
         {
             GtkWidget *cd = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-            gtk_box_append (GTK_BOX (cd), mc_title ("Presets"));
-            GtkWidget *csub = mc_label ("Quick brightness levels for common use.", "foot", 0);
+            gtk_box_append (GTK_BOX (cd), mc_title (acc_tr (ACC_T_SD_PRESETS)));
+            GtkWidget *csub = mc_label (acc_tr (ACC_T_SD_PRESETS_SUB), "foot", 0);
             gtk_label_set_wrap (GTK_LABEL (csub), TRUE);
             gtk_label_set_max_width_chars (GTK_LABEL (csub), 30);
             gtk_box_append (GTK_BOX (cd), csub);
@@ -508,8 +510,8 @@ acc_page_softdimmer (AccUI *u)
         }
         {
             GtkWidget *cd = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-            gtk_box_append (GTK_BOX (cd), mc_title ("Monitors"));
-            GtkWidget *csub = mc_label ("Per-monitor dimming levels.", "foot", 0);
+            gtk_box_append (GTK_BOX (cd), mc_title (acc_tr (ACC_T_SD_MONITORS)));
+            GtkWidget *csub = mc_label (acc_tr (ACC_T_SD_MONITORS_SUB), "foot", 0);
             gtk_label_set_wrap (GTK_LABEL (csub), TRUE);
             gtk_label_set_max_width_chars (GTK_LABEL (csub), 30);
             gtk_box_append (GTK_BOX (cd), csub);
@@ -519,7 +521,7 @@ acc_page_softdimmer (AccUI *u)
             GtkWidget *ctl = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
             gtk_widget_set_hexpand (ctl, TRUE);
             GtkWidget *sync_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-            GtkWidget *sync_lab = gtk_label_new ("Synchronize all monitors");
+            GtkWidget *sync_lab = gtk_label_new (acc_tr (ACC_T_SD_SYNC_MONITORS));
             gtk_widget_add_css_class (sync_lab, "dim");
             gtk_box_append (GTK_BOX (sync_row), sync_lab);
             GtkWidget *fill = gtk_label_new (NULL);
@@ -548,8 +550,8 @@ acc_page_softdimmer (AccUI *u)
         }
         {
             GtkWidget *cd = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-            gtk_box_append (GTK_BOX (cd), mc_title ("Advanced"));
-            GtkWidget *csub = mc_label ("Transitions, startup and behavior.", "foot", 0);
+            gtk_box_append (GTK_BOX (cd), mc_title (acc_tr (ACC_T_SD_ADVANCED)));
+            GtkWidget *csub = mc_label (acc_tr (ACC_T_SD_ADVANCED_SUB), "foot", 0);
             gtk_label_set_wrap (GTK_LABEL (csub), TRUE);
             gtk_label_set_max_width_chars (GTK_LABEL (csub), 30);
             gtk_box_append (GTK_BOX (cd), csub);
@@ -593,8 +595,8 @@ acc_page_softdimmer (AccUI *u)
                 gtk_widget_add_css_class (im2, "cardicon");
                 gtk_box_append (GTK_BOX (row), im2);
                 GtkWidget *txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-                gtk_box_append (GTK_BOX (txt), gtk_label_new ("Smooth transitions"));
-                GtkWidget *sub2 = gtk_label_new ("Fade brightness changes instead of jumping.");
+                gtk_box_append (GTK_BOX (txt), gtk_label_new (acc_tr (ACC_T_SD_TRANSITIONS)));
+                GtkWidget *sub2 = gtk_label_new (acc_tr (ACC_T_SD_TRANSITIONS_SUB));
                 gtk_widget_add_css_class (sub2, "foot");
                 gtk_label_set_wrap (GTK_LABEL (sub2), TRUE);
                 gtk_box_append (GTK_BOX (txt), sub2);
@@ -611,8 +613,8 @@ acc_page_softdimmer (AccUI *u)
                 gtk_widget_add_css_class (im2, "cardicon");
                 gtk_box_append (GTK_BOX (row), im2);
                 GtkWidget *txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-                gtk_box_append (GTK_BOX (txt), gtk_label_new ("Transition duration"));
-                GtkWidget *sub2 = gtk_label_new ("Milliseconds per brightness change.");
+                gtk_box_append (GTK_BOX (txt), gtk_label_new (acc_tr (ACC_T_SD_TRANSITION_DURATION)));
+                GtkWidget *sub2 = gtk_label_new (acc_tr (ACC_T_SD_TRANSITION_DURATION_SUB));
                 gtk_widget_add_css_class (sub2, "foot");
                 gtk_label_set_wrap (GTK_LABEL (sub2), TRUE);
                 gtk_box_append (GTK_BOX (txt), sub2);
@@ -629,8 +631,8 @@ acc_page_softdimmer (AccUI *u)
                 gtk_widget_add_css_class (im2, "cardicon");
                 gtk_box_append (GTK_BOX (row), im2);
                 GtkWidget *txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-                gtk_box_append (GTK_BOX (txt), gtk_label_new ("Restore previous brightness"));
-                GtkWidget *sub2 = gtk_label_new ("Remember brightness across sessions.");
+                gtk_box_append (GTK_BOX (txt), gtk_label_new (acc_tr (ACC_T_SD_RESTORE)));
+                GtkWidget *sub2 = gtk_label_new (acc_tr (ACC_T_SD_RESTORE_SUB));
                 gtk_widget_add_css_class (sub2, "foot");
                 gtk_label_set_wrap (GTK_LABEL (sub2), TRUE);
                 gtk_box_append (GTK_BOX (txt), sub2);
@@ -647,8 +649,8 @@ acc_page_softdimmer (AccUI *u)
                 gtk_widget_add_css_class (im2, "cardicon");
                 gtk_box_append (GTK_BOX (row), im2);
                 GtkWidget *txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-                gtk_box_append (GTK_BOX (txt), gtk_label_new ("Start with GNOME session"));
-                GtkWidget *sub2 = gtk_label_new ("Launch the dimmer engine at login.");
+                gtk_box_append (GTK_BOX (txt), gtk_label_new (acc_tr (ACC_T_SD_AUTOSTART)));
+                GtkWidget *sub2 = gtk_label_new (acc_tr (ACC_T_SD_AUTOSTART_SUB));
                 gtk_widget_add_css_class (sub2, "foot");
                 gtk_label_set_wrap (GTK_LABEL (sub2), TRUE);
                 gtk_box_append (GTK_BOX (txt), sub2);
@@ -665,8 +667,8 @@ acc_page_softdimmer (AccUI *u)
                 gtk_widget_add_css_class (im2, "cardicon");
                 gtk_box_append (GTK_BOX (row), im2);
                 GtkWidget *txt = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-                gtk_box_append (GTK_BOX (txt), gtk_label_new ("Hide on fullscreen"));
-                GtkWidget *sub2 = gtk_label_new ("Remove overlays for fullscreen apps.");
+                gtk_box_append (GTK_BOX (txt), gtk_label_new (acc_tr (ACC_T_SD_FULLSCREEN)));
+                GtkWidget *sub2 = gtk_label_new (acc_tr (ACC_T_SD_FULLSCREEN_SUB));
                 gtk_widget_add_css_class (sub2, "foot");
                 gtk_label_set_wrap (GTK_LABEL (sub2), TRUE);
                 gtk_box_append (GTK_BOX (txt), sub2);
@@ -695,8 +697,8 @@ acc_page_softdimmer (AccUI *u)
         }
         {
             GtkWidget *cd = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
-            gtk_box_append (GTK_BOX (cd), mc_title ("Diagnostics"));
-            GtkWidget *csub = mc_label ("Engine, extension and D-Bus status.", "foot", 0);
+            gtk_box_append (GTK_BOX (cd), mc_title (acc_tr (ACC_T_SD_DIAGNOSTICS)));
+            GtkWidget *csub = mc_label (acc_tr (ACC_T_SD_DIAGNOSTICS_SUB), "foot", 0);
             gtk_label_set_wrap (GTK_LABEL (csub), TRUE);
             gtk_label_set_max_width_chars (GTK_LABEL (csub), 30);
             gtk_box_append (GTK_BOX (cd), csub);
@@ -711,11 +713,11 @@ acc_page_softdimmer (AccUI *u)
                 gtk_box_append (GTK_BOX (ctl), row);
             };
 
-            add_diag_row ("Engine", &p->diag_engine_status);
-            add_diag_row ("GNOME extension", &p->diag_extension_status);
-            add_diag_row ("D-Bus service", &p->diag_dbus_status);
-            add_diag_row ("Monitor detection", &p->diag_monitor_status);
-            add_diag_row ("Last error", &p->diag_error);
+            add_diag_row (acc_tr (ACC_T_SD_DIAG_ENGINE), &p->diag_engine_status);
+            add_diag_row (acc_tr (ACC_T_SD_DIAG_EXTENSION), &p->diag_extension_status);
+            add_diag_row (acc_tr (ACC_T_SD_DIAG_DBUS), &p->diag_dbus_status);
+            add_diag_row (acc_tr (ACC_T_SD_DIAG_MONITORS), &p->diag_monitor_status);
+            add_diag_row (acc_tr (ACC_T_SD_DIAG_ERROR), &p->diag_error);
 
             gtk_box_append (GTK_BOX (h), ctl);
         }

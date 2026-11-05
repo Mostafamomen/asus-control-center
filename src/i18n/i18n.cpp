@@ -228,6 +228,19 @@ static const gchar *EN[ACC_T_COUNT] = {
   "No non-hub USB devices found",
   "System Testing",
   "Hardware and software diagnostic tests.",
+  /* Soft Dimmer */
+  "Presets", "Quick brightness levels for common use.",
+  "Monitors", "Per-monitor dimming levels.",
+  "Advanced", "Transitions, startup and behavior.",
+  "Diagnostics", "Engine, extension and D-Bus status.",
+  "Reset",
+  "Smooth transitions", "Fade brightness changes instead of jumping.",
+  "Transition duration", "Milliseconds per brightness change.",
+  "Restore previous brightness", "Remember brightness across sessions.",
+  "Start with GNOME session", "Launch the dimmer engine at login.",
+  "Hide on fullscreen", "Remove overlays for fullscreen apps.",
+  "Synchronize all monitors",
+  "Engine", "GNOME extension", "D-Bus service", "Monitor detection", "Last error",
 };
 
 static const gchar *AR[ACC_T_COUNT] = {
@@ -452,6 +465,19 @@ static const gchar *AR[ACC_T_COUNT] = {
   "لا أجهزة USB غير المراكز الجذرية",
   "اختبار النظام",
   "اختبارات تشخيصية للعتاد والبرمجيات.",
+  /* Soft Dimmer */
+  "المعاينات", "مستويات السطوع السريعة للاستخدام الشائع.",
+  "الشاشات", "مستويات التعتيم لكل شاشة.",
+  "الإعدادات المتقدمة", "الانتقالات والسلوك والتشغيل.",
+  "التشخيص", "حالة المحرك والملحق وخدمة D-Bus.",
+  "إعادة الضبط",
+  "الانتقالات الناعمة", "تدرج تغييرات السطوع بدلاً من القفز.",
+  "مدة الانتقال", "مللي ثانية لكل تغيير في السطوع.",
+  "استعادة السطوع السابق", "تذكر مستوى السطوع عبر الجلسات.",
+  "بدء التشغيل مع جلسة جنوم", "تشغيل محرك التعتيم عند تسجيل الدخول.",
+  "إخفاء عند ملء الشاشة", "إزالة الطبقات التغطية للتطبيقات التي ملء الشاشة.",
+  "مزامنة جميع الشاشات",
+  "المحرك", "ملحق جنوم", "خدمة D-Bus", "كشف الشاشات", "آخر خطأ",
 };
 
 /* count mismatch guard: arrays must both be exactly ACC_T_COUNT long */
