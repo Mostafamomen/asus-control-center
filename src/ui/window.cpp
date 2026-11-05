@@ -758,6 +758,9 @@ acc_ui_boot (GtkApplication *app)
   adw_application_window_set_content (ADW_APPLICATION_WINDOW (g_root),
                                       mc_gray_new (g_toasts));
 
+  /* Fill the screen on launch so ASUSCraft uses the full display area. */
+  gtk_window_maximize (GTK_WINDOW (g_root));
+
   gtk_window_present (GTK_WINDOW (g_root));
 
   /* every widget exists now: apply the saved sidebar state once */
