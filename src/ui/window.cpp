@@ -117,7 +117,7 @@ sidebar_apply (gboolean collapsed)
 
   if (g_side)
     gtk_widget_set_size_request (g_side,
-                                 collapsed ? SIDE_CLOSED_W : SIDE_OPEN_W, -1);
+                                 collapsed ? SIDE_CLOSED_W : 200, -1);
   if (g_navlabels)
     for (guint i = 0; i < g_navlabels->len; i++)
       gtk_widget_set_visible ((GtkWidget *) g_ptr_array_index (g_navlabels, i),
@@ -442,6 +442,9 @@ acc_ui_boot (GtkApplication *app)
   g_root = GTK_WIDGET (adw_application_window_new (app));
   gtk_window_set_title (GTK_WINDOW (g_root), "ASUSCraft");
   gtk_window_set_default_size (GTK_WINDOW (g_root), 1180, 760);
+  /* Minimum size in logical (scaled) pixels so the window never becomes
+   * unusable on small or high-DPI displays. */
+  gtk_widget_set_size_request (GTK_WIDGET (g_root), 900, 600);
 
   ui = g_new0 (AccUI, 1);
 
@@ -607,7 +610,8 @@ acc_ui_boot (GtkApplication *app)
   GtkWidget *side = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_add_css_class (side, "acside");
   g_side = side;
-  gtk_widget_set_size_request (side, SIDE_OPEN_W, -1);
+  /* Minimum width in logical pixels; natural width comes from content. */
+  gtk_widget_set_size_request (side, 200, -1);
 
   GtkListBox *nav = GTK_LIST_BOX (gtk_list_box_new ());
   g_nav = nav;
@@ -730,9 +734,6 @@ acc_ui_boot (GtkApplication *app)
   mc_gray_set (acc_theme_gray_pref ());
   adw_application_window_set_content (ADW_APPLICATION_WINDOW (g_root),
                                       mc_gray_new (g_toasts));
-
-  /* Fill the screen on launch so ASUSCraft uses the full display area. */
-  gtk_window_maximize (GTK_WINDOW (g_root));
 
   gtk_window_present (GTK_WINDOW (g_root));
 

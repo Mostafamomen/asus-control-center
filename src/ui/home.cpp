@@ -102,6 +102,8 @@ card (const gchar *icon, AccStr title, GtkWidget **out_body)
 {
   GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_add_css_class (box, "card");
+  gtk_widget_set_hexpand (box, TRUE);
+  gtk_widget_set_vexpand (box, FALSE);
   GtkWidget *head = card_head (icon, title);
   gtk_box_append (GTK_BOX (box), head);
   if (out_body)
@@ -575,9 +577,12 @@ acc_home_build (AccUI *u)
   GtkWidget *scroll = gtk_scrolled_window_new ();
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroll),
                                   GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_widget_set_hexpand (scroll, TRUE);
+  gtk_widget_set_vexpand (scroll, TRUE);
 
   GtkWidget *page = gtk_box_new (GTK_ORIENTATION_VERTICAL, 14);
   gtk_widget_set_name (page, "page");
+  gtk_widget_set_hexpand (page, TRUE);
   gtk_widget_set_margin_top (page, 14);
   gtk_widget_set_margin_bottom (page, 16);
   gtk_widget_set_margin_start (page, 20);
@@ -587,6 +592,7 @@ acc_home_build (AccUI *u)
   GtkWidget *hero = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 24);
   gtk_widget_add_css_class (hero, "achero");
   gtk_widget_set_name (hero, "hero");
+  gtk_widget_set_hexpand (hero, TRUE);
   {
     GtkWidget *hcol = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_set_name (hcol, "hcol");
@@ -637,7 +643,6 @@ acc_home_build (AccUI *u)
     /* Featured: honest quick links into this app's pages */
     GtkWidget *fc = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
     gtk_widget_add_css_class (fc, "featcard");
-    gtk_widget_set_size_request (fc, 300, -1);
     gtk_widget_set_valign (fc, GTK_ALIGN_CENTER);
     gtk_box_append (GTK_BOX (fc), lbl (acc_tr (ACC_T_FEATURED),
                                        "overline", 0));
@@ -658,6 +663,7 @@ acc_home_build (AccUI *u)
   gtk_grid_set_column_spacing (GTK_GRID (grid), 14);
   gtk_grid_set_row_spacing (GTK_GRID (grid), 14);
   gtk_grid_set_column_homogeneous (GTK_GRID (grid), TRUE);
+  gtk_widget_set_hexpand (grid, TRUE);
 
   gtk_grid_attach (GTK_GRID (grid), card_battery (u), 0, 0, 1, 1);
   gtk_grid_attach (GTK_GRID (grid), card_gpu (u),      1, 0, 1, 1);
