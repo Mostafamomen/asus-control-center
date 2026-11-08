@@ -307,8 +307,8 @@ scale slider {
   box-shadow: 0 0 0 4px #FFFFFF, 0 0 0 5px #E5E5E5;
   border: none;
 }
-switch { border-radius: 999px; }
-switch slider { border-radius: 999px; background: #FFFFFF; }
+switch { border-radius: 999px; min-width: 40px; min-height: 24px; }
+switch slider { border-radius: 999px; background: #FFFFFF; min-width: 18px; min-height: 18px; margin: 2px; }
 switch:checked { background: #006CE1; }
 progressbar trough { background: #E1E1E1; border-radius: 999px; min-height: 6px;
   border: none; }

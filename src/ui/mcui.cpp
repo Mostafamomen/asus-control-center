@@ -150,6 +150,7 @@ mc_switch (gboolean active)
 {
   GtkWidget *sw = gtk_switch_new ();
   gtk_switch_set_active (GTK_SWITCH (sw), active);
+  gtk_widget_set_size_request (sw, 40, 24);
   gtk_widget_set_valign (sw, GTK_ALIGN_CENTER);
   return sw;
 }

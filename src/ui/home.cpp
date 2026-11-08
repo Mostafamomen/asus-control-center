@@ -32,6 +32,8 @@ static GtkWidget *
 lbl (const gchar *text, const gchar *cssclass, int xalign)
 {
   GtkWidget *l = gtk_label_new (text);
+  gtk_label_set_wrap (GTK_LABEL (l), TRUE);
+  gtk_label_set_ellipsize (GTK_LABEL (l), PANGO_ELLIPSIZE_END);
   gtk_label_set_xalign (GTK_LABEL (l), xalign);
   if (cssclass)
     gtk_widget_add_css_class (l, cssclass);
@@ -102,6 +104,7 @@ card (const gchar *icon, AccStr title, GtkWidget **out_body)
 {
   GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_add_css_class (box, "card");
+  gtk_widget_set_size_request (box, 300, -1);
   gtk_widget_set_hexpand (box, TRUE);
   gtk_widget_set_vexpand (box, FALSE);
   GtkWidget *head = card_head (icon, title);
@@ -171,6 +174,7 @@ card_battery (AccUI *u)
   gtk_widget_set_sensitive (u->bat_limit_scale, FALSE);
   u->bat_limit_val = lbl ("—", "val", 1);
   u->bat_switch = gtk_switch_new ();
+  gtk_widget_set_size_request (u->bat_switch, 40, 24);
   gtk_box_append (GTK_BOX (row), u->bat_limit_scale);
   gtk_box_append (GTK_BOX (row), u->bat_limit_val);
   gtk_box_append (GTK_BOX (row), u->bat_switch);
@@ -544,9 +548,12 @@ lap_mock (AccUI *u)
   gchar *path = acc_asset_path (img_name);
   g_free (img_name);
 
-  GtkWidget *ov = gtk_overlay_new ();
-  gtk_widget_set_halign (ov, GTK_ALIGN_FILL);
-  gtk_widget_set_valign (ov, GTK_ALIGN_CENTER);
+  GtkWidget *frame = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+  gtk_widget_set_size_request (frame, 300, 192);
+  gtk_widget_set_hexpand (frame, FALSE);
+  gtk_widget_set_vexpand (frame, FALSE);
+  gtk_widget_set_halign (frame, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (frame, GTK_ALIGN_CENTER);
 
   GtkWidget *pic = gtk_picture_new ();
   if (path)
@@ -556,20 +563,139 @@ lap_mock (AccUI *u)
   gtk_picture_set_can_shrink (GTK_PICTURE (pic), TRUE);
   gtk_widget_set_hexpand (pic, TRUE);
   gtk_widget_set_vexpand (pic, TRUE);
-  gtk_overlay_set_child (GTK_OVERLAY (ov), pic);
+  gtk_box_append (GTK_BOX (frame), pic);
 
-  /* keep the picture's aspect ratio at every window size */
-  GtkWidget *af = gtk_aspect_frame_new (0.5, 0.5, 940.0 / 600.0, TRUE);
-  gtk_widget_set_hexpand (af, TRUE);
-  gtk_widget_set_valign (af, GTK_ALIGN_CENTER);
-  gtk_aspect_frame_set_child (GTK_ASPECT_FRAME (af), ov);
-
-  return af;
+  return frame;
 }
 
 /* ------------------------------------------------------------------ */
 /* page assembly                                                       */
 /* ------------------------------------------------------------------ */
+
+typedef struct
+{
+  GtkWidget *grid;
+  GtkWidget *scroll;
+  GtkWidget *cards[5];
+  int columns;
+  gboolean scheduled;
+  GdkSurface *surface;
+  gulong surface_width_handler;
+} GridLayout;
+
+static void
+home_cards_layout_fill (GridLayout *layout, int width)
+{
+  gint columns = 1;
+  gint content_width = MAX (0, width - 40);
+
+  if (content_width >= 0)
+    columns = (content_width + 14) / (300 + 14);
+  columns = MAX (1, MIN (3, columns));
+  if (columns == layout->columns)
+    return;
+  layout->columns = columns;
+
+  for (guint i = 0; i < 5; i++)
+    {
+      if (gtk_widget_get_parent (layout->cards[i]) == layout->grid)
+        gtk_grid_remove (GTK_GRID (layout->grid), layout->cards[i]);
+    }
+
+  if (columns == 3)
+    {
+      gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[0], 0, 0, 1, 1);
+      gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[1], 1, 0, 1, 1);
+      gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[2], 2, 0, 1, 1);
+      gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[3], 0, 1, 1, 1);
+      gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[4], 1, 1, 2, 1);
+    }
+  else if (columns == 2)
+    {
+      gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[0], 0, 0, 1, 1);
+      gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[1], 1, 0, 1, 1);
+      gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[2], 0, 1, 1, 1);
+      gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[3], 1, 1, 1, 1);
+      gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[4], 0, 2, 2, 1);
+    }
+  else
+    {
+      for (guint i = 0; i < 5; i++)
+        gtk_grid_attach (GTK_GRID (layout->grid), layout->cards[i], 0, (int) i, 1, 1);
+    }
+}
+
+static gboolean
+home_cards_layout_deferred (gpointer user)
+{
+  GridLayout *layout = (GridLayout *) user;
+  layout->scheduled = FALSE;
+  if (layout->scroll)
+    home_cards_layout_fill (layout, gtk_widget_get_width (layout->scroll));
+  return G_SOURCE_REMOVE;
+}
+
+static void
+home_cards_layout_schedule (GridLayout *layout)
+{
+  if (!layout->scheduled)
+    {
+      layout->scheduled = TRUE;
+      g_idle_add (home_cards_layout_deferred, layout);
+    }
+}
+
+static void
+home_cards_layout_surface_width_changed (GObject *surface, GParamSpec *pspec,
+                                         gpointer user)
+{
+  (void) surface;
+  (void) pspec;
+  home_cards_layout_schedule ((GridLayout *) user);
+}
+
+static void
+home_cards_layout_surface_disconnected (GridLayout *layout)
+{
+  if (layout->surface && layout->surface_width_handler)
+    g_signal_handler_disconnect (layout->surface,
+                                 layout->surface_width_handler);
+  layout->surface = NULL;
+  layout->surface_width_handler = 0;
+}
+
+static void
+home_cards_layout_scroll_mapped (GtkWidget *scroll, gpointer user)
+{
+  GridLayout *layout = (GridLayout *) user;
+  GdkSurface *surface = gtk_native_get_surface (GTK_NATIVE (scroll));
+
+  home_cards_layout_surface_disconnected (layout);
+  if (surface)
+    {
+      layout->surface = surface;
+      layout->surface_width_handler =
+        g_signal_connect (surface, "notify::width",
+                          G_CALLBACK (home_cards_layout_surface_width_changed),
+                          layout);
+    }
+
+  home_cards_layout_schedule (layout);
+}
+
+static void
+home_cards_layout_scroll_unrealized (GtkWidget *scroll, gpointer user)
+{
+  (void) scroll;
+  home_cards_layout_surface_disconnected ((GridLayout *) user);
+}
+
+static void
+home_cards_layout_free (GridLayout *layout)
+{
+  home_cards_layout_surface_disconnected (layout);
+  g_free (layout);
+}
 
 GtkWidget *
 acc_home_build (AccUI *u)
@@ -658,18 +784,33 @@ acc_home_build (AccUI *u)
   }
   gtk_box_append (GTK_BOX (page), hero);
 
-  /* cards grid: 3 × 2 — battery, GPU, display; system + wide fans card */
+  /* Cards keep their original width whenever possible. The grid switches
+   * from three to two to one columns only when the available content
+   * width can no longer hold the preferred card width plus the
+   * established 14-pixel gutters. The fans card keeps its original
+   * two-column span on wide and medium layouts. */
   GtkWidget *grid = gtk_grid_new ();
   gtk_grid_set_column_spacing (GTK_GRID (grid), 14);
   gtk_grid_set_row_spacing (GTK_GRID (grid), 14);
   gtk_grid_set_column_homogeneous (GTK_GRID (grid), TRUE);
   gtk_widget_set_hexpand (grid, TRUE);
 
-  gtk_grid_attach (GTK_GRID (grid), card_battery (u), 0, 0, 1, 1);
-  gtk_grid_attach (GTK_GRID (grid), card_gpu (u),      1, 0, 1, 1);
-  gtk_grid_attach (GTK_GRID (grid), card_oled (u),     2, 0, 1, 1);
-  gtk_grid_attach (GTK_GRID (grid), card_sys (u),      0, 1, 1, 1);
-  gtk_grid_attach (GTK_GRID (grid), card_fans (u),     1, 1, 2, 1);
+  GtkWidget *cards[5] = {
+    card_battery (u), card_gpu (u), card_oled (u),
+    card_sys (u), card_fans (u),
+  };
+  GridLayout *layout = g_new0 (GridLayout, 1);
+  layout->grid = grid;
+  layout->scroll = scroll;
+  for (guint i = 0; i < 5; i++)
+    layout->cards[i] = cards[i];
+  g_object_set_data_full (G_OBJECT (grid), "home-grid-layout", layout,
+                          (GDestroyNotify) home_cards_layout_free);
+  g_signal_connect (scroll, "map",
+                    G_CALLBACK (home_cards_layout_scroll_mapped), layout);
+  g_signal_connect (scroll, "unrealize",
+                    G_CALLBACK (home_cards_layout_scroll_unrealized), layout);
+  home_cards_layout_fill (layout, gtk_widget_get_width (scroll));
   gtk_box_append (GTK_BOX (page), grid);
 
   gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), page);

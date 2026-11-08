@@ -9,6 +9,7 @@
 #include "softcenter.h"
 #include "pcmanager.h"
 #include "systest.h"
+#include "security.h"
 #include "quickactions.h"
 #include "theme.h"
 #include "mcui.h"
@@ -504,19 +505,7 @@ acc_ui_boot (GtkApplication *app)
   g_signal_connect (cbtn, "clicked", G_CALLBACK (sidebar_toggle_cb), NULL);
   gtk_header_bar_pack_start (GTK_HEADER_BAR (bar), cbtn);
 
-  /* Keep the laptop model centered between the brand and header actions. */
-  GtkWidget *hbcol = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
-  gtk_widget_set_halign (hbcol, GTK_ALIGN_CENTER);
-  gtk_widget_set_valign (hbcol, GTK_ALIGN_CENTER);
-  {
-    gchar *m = dmi_product_name ();
-    GtkWidget *msub = lbl_x (m, "hbsub", 0, FALSE);
-    gtk_label_set_ellipsize (GTK_LABEL (msub), PANGO_ELLIPSIZE_END);
-    gtk_label_set_max_width_chars (GTK_LABEL (msub), 40);
-    gtk_box_append (GTK_BOX (hbcol), msub);
-    g_free (m);
-  }
-  gtk_header_bar_set_title_widget (GTK_HEADER_BAR (bar), hbcol);
+  gtk_header_bar_set_title_widget (GTK_HEADER_BAR (bar), NULL);
 
   GtkWidget *langbtn = gtk_button_new_with_label ("EN / ع");
   gtk_widget_add_css_class (langbtn, "langpill");
@@ -628,6 +617,7 @@ acc_ui_boot (GtkApplication *app)
     { "applications-system-symbolic",     ACC_T_SERVICE,      "sysmgr"        },  /* 6 */
     { "application-x-executable-symbolic", ACC_T_SERVICE,    "softcenter"    },  /* 7 */
     { "computer-symbolic",                ACC_T_SERVICE,      "pcmanager"     },  /* 8 */
+    { "shield-symbolic",                  ACC_T_SERVICE,      "security"      },  /* 11 */
     { "software-update-available-symbolic", ACC_T_NAV_UPD,    "support"       },  /* 9 */
     { "emblem-system-symbolic",           ACC_T_NAV_SET,      "settings"      },  /* 10 */
   };
@@ -641,6 +631,17 @@ acc_ui_boot (GtkApplication *app)
   for (guint i = 5; i <= 9; i++)
     gtk_list_box_append (nav, mk_nav_row (navs[i].icon, navs[i].txt,
                                           navs[i].page));
+  /* Security group: row 11 */
+  gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_SW));
+  gtk_list_box_append (nav, mk_nav_row (navs[11].icon,
+                                        ACC_T_NAV_HOME,
+                                        navs[11].page));
+  {
+    if (g_navlabels && g_navlabels->len) {
+      GtkWidget *sec_lbl = (GtkWidget *) g_ptr_array_index (g_navlabels, g_navlabels->len - 1);
+      if (sec_lbl) gtk_label_set_text (GTK_LABEL (sec_lbl), "Security Center");
+    }
+  }
   /* Settings group: row 10 */
   gtk_list_box_append (nav, mk_nav_group (ACC_T_SEC_PREF));
   gtk_list_box_append (nav, mk_nav_row (navs[10].icon, navs[10].txt,
@@ -664,6 +665,7 @@ acc_ui_boot (GtkApplication *app)
   gtk_stack_add_named (GTK_STACK (stack), acc_page_softcenter (ui), "softcenter");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_pcmanager (ui), "pcmanager");
   gtk_stack_add_named (GTK_STACK (stack), acc_systest_page (ui), "systest");
+  gtk_stack_add_named (GTK_STACK (stack), acc_page_security (ui), "security");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_settings (ui), "settings");
 
   /* restore the collapsed/expanded state from the last session */
@@ -734,28 +736,13 @@ acc_ui_boot (GtkApplication *app)
   adw_application_window_set_content (ADW_APPLICATION_WINDOW (g_root),
                                       mc_gray_new (g_toasts));
 
+  /* Make the initial unmaximized state explicit before presentation.
+   * GTK will otherwise leave this to the window manager even if the
+   * application never calls gtk_window_maximize(). */
+  gtk_window_unmaximize (GTK_WINDOW (g_root));
   gtk_window_present (GTK_WINDOW (g_root));
-  g_print ("DIAG: window presented, g_root=%p, g_side=%p, g_stack=%p\n", (void*)g_root, (void*)g_side, (void*)g_stack);
-  g_timeout_add (500, [](gpointer data) -> gboolean {
-    if (!g_root) return G_SOURCE_REMOVE;
-    int mw=0, mh=0;
-    gtk_widget_get_size_request (GTK_WIDGET(g_root), &mw, &mh);
-    g_print ("DIAG window: allocated %dx%d, size_request %dx%d\n",
-            gtk_widget_get_width (GTK_WIDGET(g_root)), gtk_widget_get_height (GTK_WIDGET(g_root)), mw, mh);
-    if (g_side) {
-      int smw=0, smh=0;
-      gtk_widget_get_size_request (g_side, &smw, &smh);
-      g_print ("DIAG sidebar: allocated %dx%d, size_request %dx%d\n",
-                gtk_widget_get_width (g_side), gtk_widget_get_height (g_side), smw, smh);
-    }
-    if (g_stack) {
-      g_print ("DIAG stack: allocated %dx%d\n",
-                gtk_widget_get_width (g_stack), gtk_widget_get_height (g_stack));
-    }
-    return G_SOURCE_REMOVE;
-  }, NULL);
 
-  /* every widget exists now: apply the saved sidebar state once */
+/* every widget exists now: apply the saved sidebar state once */
   sidebar_apply (s_collapsed);
 
   if (g_getenv ("ACC_DEBUG"))
@@ -780,6 +767,7 @@ acc_ui_destroy (void)
   acc_softcenter_teardown ();
   acc_pcmanager_teardown ();
   acc_systest_teardown ();
+  acc_security_teardown ();
   g_side = NULL;
   g_brandmark = NULL;
   g_uchip = NULL;
