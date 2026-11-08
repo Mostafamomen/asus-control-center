@@ -741,3 +741,19 @@ acc_page_softdimmer (AccUI *u)
 
     return mc_page (page);
 }
+
+void
+acc_sd_page_teardown (void)
+{
+    if (g_sd)
+    {
+        if (g_sd->brightness_handler)
+            acc_sd_engine_disconnect (g_sd->engine, g_sd->brightness_handler);
+        if (g_sd->enabled_handler)
+            acc_sd_engine_disconnect (g_sd->engine, g_sd->enabled_handler);
+        if (g_sd->status_handler)
+            acc_sd_engine_disconnect (g_sd->engine, g_sd->status_handler);
+        g_free (g_sd);
+        g_sd = NULL;
+    }
+}

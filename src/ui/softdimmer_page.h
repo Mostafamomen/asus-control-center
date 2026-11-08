@@ -24,6 +24,9 @@ G_BEGIN_DECLS
 
 GtkWidget *acc_page_softdimmer (AccUI *u);
 
+/* called from acc_ui_destroy so static widget refs don't dangle */
+void acc_sd_page_teardown (void);
+
 G_END_DECLS
 
 #endif /* ACC_UI_SOFTDIMMER_PAGE_H */

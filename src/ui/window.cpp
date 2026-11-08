@@ -665,7 +665,6 @@ acc_ui_boot (GtkApplication *app)
   gtk_stack_add_named (GTK_STACK (stack), acc_page_pcmanager (ui), "pcmanager");
   gtk_stack_add_named (GTK_STACK (stack), acc_systest_page (ui), "systest");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_settings (ui), "settings");
-  gtk_stack_add_named (GTK_STACK (stack), acc_page_softdimmer (ui), "softdimmer");
 
   /* restore the collapsed/expanded state from the last session */
   sidebar_load_pref ();
@@ -736,6 +735,25 @@ acc_ui_boot (GtkApplication *app)
                                       mc_gray_new (g_toasts));
 
   gtk_window_present (GTK_WINDOW (g_root));
+  g_print ("DIAG: window presented, g_root=%p, g_side=%p, g_stack=%p\n", (void*)g_root, (void*)g_side, (void*)g_stack);
+  g_timeout_add (500, [](gpointer data) -> gboolean {
+    if (!g_root) return G_SOURCE_REMOVE;
+    int mw=0, mh=0;
+    gtk_widget_get_size_request (GTK_WIDGET(g_root), &mw, &mh);
+    g_print ("DIAG window: allocated %dx%d, size_request %dx%d\n",
+            gtk_widget_get_width (GTK_WIDGET(g_root)), gtk_widget_get_height (GTK_WIDGET(g_root)), mw, mh);
+    if (g_side) {
+      int smw=0, smh=0;
+      gtk_widget_get_size_request (g_side, &smw, &smh);
+      g_print ("DIAG sidebar: allocated %dx%d, size_request %dx%d\n",
+                gtk_widget_get_width (g_side), gtk_widget_get_height (g_side), smw, smh);
+    }
+    if (g_stack) {
+      g_print ("DIAG stack: allocated %dx%d\n",
+                gtk_widget_get_width (g_stack), gtk_widget_get_height (g_stack));
+    }
+    return G_SOURCE_REMOVE;
+  }, NULL);
 
   /* every widget exists now: apply the saved sidebar state once */
   sidebar_apply (s_collapsed);
