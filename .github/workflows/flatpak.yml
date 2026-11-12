@@ -59,7 +59,9 @@ jobs:
         run: |
           set -eu
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+          # elfutils provides eu-strip/eu-elfcompress, which flatpak-builder
+          # needs to split the debuginfo out of the binary
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils
           flatpak --user remote-add --if-not-exists flathub \
             https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak --user install -y flathub org.gnome.Sdk//46 org.gnome.Platform//46
