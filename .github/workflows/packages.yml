@@ -34,7 +34,11 @@ jobs:
       # builds both packages: the app and the host agent
       - run: packaging/build-rpm.sh
       - name: The agent's self test
-        run: ./agent/asuscraft-agent --check
+        run: |
+          # build-rpm.sh builds inside the rpmbuild tree, so the workspace
+          # has no binary to test: build it here and run its gate
+          make -C agent
+          ./agent/asuscraft-agent --check
       - uses: actions/upload-artifact@v4
         with:
           name: rpm-${{ matrix.image == 'fedora:latest' && 'fedora' || 'el10' }}

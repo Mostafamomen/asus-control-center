@@ -116,7 +116,7 @@ jobs:
           dnf install -y rpm-build
           for spec in packaging/rpm/asus-control-center.spec packaging/rpm/asuscraft-agent.spec; do
             rpmspec -q --qf '%{name} %{version}-%{release}\n' "$spec"
-            rpmspec -q --list "$spec" >/dev/null
+            rpmspec --parse "$spec" >/dev/null
           done
           rpmspec -q --qf '%{name} %{version}\n' packaging/rpm/asuscraft-agent.spec | grep -q 'asuscraft-agent 1.2.5'
           echo "ok: both specifications parse and the agent package is 1.2.5"
