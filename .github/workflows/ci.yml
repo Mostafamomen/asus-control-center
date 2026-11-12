@@ -85,7 +85,12 @@ jobs:
   metadata:
     name: Release metadata and versions
     runs-on: ubuntu-latest
+    # A Fedora container, because the RPM specifications are checked with
+    # rpmspec - the same tooling the packaging workflow uses.
+    container: fedora:latest
     steps:
+      - name: Install the tooling
+        run: dnf install -y git
       - uses: actions/checkout@v4
       - name: Every version source agrees
         run: ./flatpak/verify-versions.sh 1.2.5
@@ -107,7 +112,7 @@ jobs:
       - name: The RPM specifications parse and carry the right files
         run: |
           set -eu
-          sudo dnf install -y rpm-build
+          dnf install -y rpm-build
           for spec in packaging/rpm/asus-control-center.spec packaging/rpm/asuscraft-agent.spec; do
             rpmspec -q --qf '%{name} %{version}-%{release}\n' "$spec"
             rpmspec -q --list "$spec" >/dev/null
