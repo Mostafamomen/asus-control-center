@@ -12,7 +12,7 @@ BuildRequires:  make
 BuildRequires:  pkgconfig(gtk4)
 BuildRequires:  pkgconfig(libadwaita-1) >= 1.5
 BuildRequires:  desktop-file-utils
-BuildRequires:  libappstream-glib
+BuildRequires:  appstream
 
 Requires:       polkit
 Requires:       hicolor-icon-theme
@@ -44,7 +44,7 @@ pkexec, so no part of the app runs as root.
 
 %check
 desktop-file-validate %{buildroot}%{_datadir}/applications/io.github.asuscontrolcenter.AsusControlCenter.desktop
-appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.asuscontrolcenter.AsusControlCenter.metainfo.xml
+appstreamcli validate --no-net %{buildroot}%{_metainfodir}/io.github.asuscontrolcenter.AsusControlCenter.metainfo.xml
 
 %files
 %license LICENSE

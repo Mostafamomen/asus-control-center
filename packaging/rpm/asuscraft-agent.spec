@@ -9,7 +9,7 @@ Source0:        %{url}/archive/v%{version}/asus-control-center-%{version}.tar.gz
 
 BuildRequires:  gcc-c++
 BuildRequires:  make
-BuildRequires:  pkgconfig(glib2)
+BuildRequires:  pkgconfig(glib-2.0)
 
 # The agent talks to polkit (through pkexec) and, for the bundled GNOME
 # Shell extension, to the desktop session.
