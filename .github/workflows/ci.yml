@@ -90,7 +90,8 @@ jobs:
     container: fedora:latest
     steps:
       - name: Install the tooling
-        run: dnf install -y git
+        # git for the credential scan, python3-pyyaml for the manifest parse
+        run: dnf install -y git python3-pyyaml
       - uses: actions/checkout@v4
       - name: Every version source agrees
         run: ./flatpak/verify-versions.sh 1.2.5
