@@ -1,177 +1,130 @@
 # ASUSCraft 1.2.5 — Final release checklist
 
 **Date:** 2026-11-12
-**Target:** the tag `v1.2.5` and the GitHub Release for `v1.2.5`
-**State:** everything below the line is prepared ✓; **nothing is committed, pushed, tagged or published** ✓.
+**Target:** the branch `1.25`, the tag `v1.2.5` and the GitHub Release for `v1.2.5`
+**State:** the branch is pushed ✓, the tag exists ✓, the release exists as a **DRAFT** ✓ —
+**nothing is published** ✓.
 
 ---
 
-## 1. The state of the release
+## 1. What was executed
 
-| | |
+| step | result |
 |---|---|
-| the branch | `release/1.2.5`, based on `v1.2.4` (`aa1269c`) ✓ — the upstream's real release line ✓ |
-| the staged change | 98 files, +14 320 / −4 742 ✓ |
-| the commit | **not made** ✓ |
-| the push | **not done** ✓ |
-| the tag `v1.2.5` | **not created** ✓ |
-| the GitHub Release | **not created** ✓ (it will be created as a **draft** ✓) |
+| the release commit | `39809c7` — 106 files, +15 494 / −4 742 ✓ |
+| the push | `release/1.2.5` ✓, a normal non-force push ✓ |
+| the CI fixes | `aa8e3a2` (the packaging), `892cb0f` (PyYAML), `26a86bd` (rpmspec), `55b4a3a` (elfutils) ✓ |
+| the branch `1.25` | pushed at `55b4a3a` ✓ — the upstream's `10.2`-style naming ✓ |
+| the tag `v1.2.5` | `26a86bd` — the commit that passed CI ✓ (an ancestor of the branch tip ✓) |
+| the release | **draft** ✓, titled "ASUSCraft 1.2.5" ✓, with the prepared notes ✓ |
+| the assets | exactly the five verified ones ✓ |
+| publication | **not done** ✗ — it needs a separate, explicit approval ✓ |
 
----
+### The final refs
 
-## 2. The checklist
+```
+55b4a3a43919155f34639a2c296b8fa2488bb5f2  refs/heads/1.25
+c053186586d43fe40d2c6d5e759e9a85256c628d  refs/tags/v1.2.5 (the tag object)
+26a86bd742ad7f410bdbe82f236258539dba7164  refs/tags/v1.2.5^{} (the commit)
+```
 
-### The content ✓
+### The three workflows, all green
 
-- [x] The application version is **1.2.5** in the Makefile ✓, both RPM specifications ✓, `debian/changelog` ✓ and the AppStream metainfo ✓.
-- [x] The agent's **package** version is **1.2.5** ✓; its **D-Bus interface** version stays independent at **1.0** ✓.
-- [x] The Flatpak's application id is the lower-case `io.github.asuscontrolcenter.asuscraft` ✓ and its metainfo carries 1.2.5 ✓.
-- [x] The CI's tag check covers all five version sources ✓ (the Makefile was added ✓).
-- [x] `./flatpak/verify-versions.sh 1.2.5` passes ✓.
-- [x] The helper and the polkit policy are **byte-identical** to the audited ones ✓ — and the CI now pins their checksums ✓.
-- [x] The Soft Dimmer integration is **removed** ✓ and is **not** reintroduced ✗ — 16 files deleted ✓.
-- [x] **Soft Brightness Plus is kept** ✓ (`src/control/sbp_local.cpp` ✓, the bundled extension ✓).
-- [x] The D-Bus API is **additive only** ✓ — the four new methods were added ✓ and nothing incompatible changed ✗.
-- [x] The Flatpak's permissions are unchanged ✓ and guarded by `flatpak/verify-permissions.sh` ✓.
-- [x] The native installation (`asus-control-center-1.0.0-1.fc44`) was not touched ✓.
-- [x] No credentials in the tree ✓; the CI scans for them ✓.
-- [x] The old release artefacts are preserved in `dist/preserved-10.2/` ✓; the backups (twelve ✗) are intact ✓.
-
-### The build ✓
-
-- [x] `make` — exit 0, **0 warnings** ✓.
-- [x] `make -C agent` — exit 0, **0 warnings** ✓.
-- [x] `./asus-control-center --check` — **31 assertions, 0 failures** ✓.
-- [x] `./asus-control-center --self-test` — exit 0 ✓.
-- [x] `./agent/asuscraft-agent --check` — **53 assertions, 0 failures** ✓.
-- [x] The installed agent's own `--check` — 53 assertions ✓.
-- [x] The Flatpak builds ✓, installs ✓, and its gates pass inside the sandbox ✓.
-- [x] The DEB builds on Ubuntu 24.04 ✓, installs ✓, and its self-test passes ✓.
-- [x] Both RPMs build ✓ with valid metadata ✓ and no install scripts ✓.
-
-### The artefacts ✓
-
-| asset | size | SHA256 (the first 16) |
+| workflow | run | conclusion |
 |---|---|---|
-| `asus-control-center-1.2.5-1.fc45.x86_64.rpm` | 2 296 988 | `2d7861efc4609084…` |
-| `asuscraft-agent-1.2.5-1.fc45.x86_64.rpm` | 67 545 | `49cce4713bc99eb4…` |
-| `asus-control-center_1.2.5_amd64.deb` | 2 273 996 | `158e0cdd77f05d1e…` |
-| `io.github.asuscontrolcenter.asuscraft_1.2.5.flatpak` | 2 327 528 | `3932280665a0bde1…` |
-| `SHA256SUMS.txt` | — | the four above ✓ |
+| **CI** | [43174848255](https://github.com/Mostafamomen/asus-control-center/actions/runs/43174848255) | **success** ✓ — Application, Host Agent, Release metadata |
+| **Flatpak** | [43174848387](https://github.com/Mostafamomen/asus-control-center/actions/runs/43174848387) | **success** ✓ (the manifest job) and [43174848786](https://github.com/Mostafamomen/asus-control-center/actions/runs/43174848786) — the dispatch with the **full Flatpak build** ✓ |
+| **Packages** | [43175668070](https://github.com/Mostafamomen/asus-control-center/actions/runs/43175668070) | **success** ✓ — RPM (Fedora), RPM (EL 10), DEB (Ubuntu 24.04) |
 
-- [x] Every checksum re-verified ✓ (`sha256sum -c` → 4 × OK ✓).
-- [x] The Flatpak bundle **installs** from the file ✓ and its gates pass ✓.
-- [x] The filenames are preserved exactly ✓.
+### The draft release's assets
 
-### The CI ✓
+| asset | size | SHA256 |
+|---|---|---|
+| `asus-control-center-1.2.5-1.fc45.x86_64.rpm` | 2 296 991 | `34b35f651e4144118ad66b30edab674d52583676f96cd4f1daea17a7ebbba9d5` |
+| `asuscraft-agent-1.2.5-1.fc45.x86_64.rpm` | 67 541 | `3924f9d3954036bb361a023e694e2c06e7150d9a4dd03e27cb211d64aa298fd7` |
+| `asus-control-center_1.2.5_amd64.deb` | 2 273 996 | `158e0cdd77f05d1ea2b108e6780a9b28c648c8cd345e4bed3a2b3c81c7cadd81` |
+| `io.github.asuscontrolcenter.asuscraft_1.2.5.flatpak` | 2 327 528 | `3932280665a0bde138f4d48ecae7659cb5374925d5953fa8300b5bcd43f5fd57` |
+| `SHA256SUMS.txt` | 436 | the four above ✓ |
 
-- [x] `ci.yml` — the application ✓, the host agent ✓, the metadata and the version policy ✓.
-- [x] `flatpak.yml` — the manifest and the permission guard on every push ✓; the build on a tag or on demand ✓.
-- [x] `packages.yml` — extended with the agent's gate ✓ and the Makefile in the tag check ✓.
-- [x] Both helper scripts run locally ✓ and **catch a deliberate change** ✓ (four negative tests ✓).
-- [x] **No workflow has been executed by GitHub yet** ✓ — the first push is the first real run ✓, and nothing is claimed to be green until it is ✓.
-
-### The documentation ✓
-
-- [x] `GITHUB_REPOSITORY_AUDIT.md` ✓
-- [x] `CI_CONFIGURATION_REPORT.md` ✓
-- [x] `GITHUB_RELEASE_NOTES_1.2.5.md` ✓ — the release notes ✓, including the **untested KDE night light** ✓ and the **sandbox-limited camera/microphone tests** ✓
-- [x] `FINAL_RELEASE_CHECKLIST_1.2.5.md` ✓ (this file)
-- [x] `RELEASE_READINESS_1.2.5.md` ✓ and `FINAL_INTEGRATION_AUDIT_1.2.5.md` ✓ (the audit trail ✓)
+`sha256sum -c SHA256SUMS.txt` → **4 × OK** ✓ (re-verified after the upload ✓).
 
 ---
 
-## 3. The decisions the reviewer still has to make
+## 2. Two incidents during the execution — and what was done about them
+
+### The release was auto-published by the pre-existing workflow
+
+Pushing the tag fired the **`packages.yml` release job**, which already
+existed in the repository and ends with
+`softprops/action-gh-release@v2` — that action creates a **published**
+release, not a draft. The release went out with the CI's own artefacts (the
+source RPMs, the debuginfo packages, the EL 10 builds) and **no** Flatpak
+bundle.
+
+My own review checklist had described that job as creating a draft; that was
+my error, and it is corrected in this document.
+
+**Correction applied:** the release was converted back with
+`gh release edit v1.2.5 --draft=true` ✓, its CI-generated assets were removed
+✓, and exactly the five verified artefacts were uploaded ✓. `v1.2.4` is
+"Latest" again ✓. The publication is back behind an explicit approval ✓.
+
+**Follow-up (not done, for a future change):** the `packages.yml` release job
+should either be removed or made to create a draft ✓, so that a tag push can
+never publish on its own ✓.
+
+### Four CI failures, all fixed and re-run green
+
+| the failure | the cause | the fix |
+|---|---|---|
+| `sudo: 'dnf': command not found` | the release-metadata job ran on `ubuntu-latest` but checked the RPM specifications with `rpmspec` | the job moved into a Fedora container ✓ |
+| `ModuleNotFoundError: No module named 'yaml'` | the Fedora container's python3 has no PyYAML | `python3-pyyaml` installed ✓ |
+| `rpmspec: --list: unknown option` | rpmspec has no `--list` | `rpmspec --parse` ✓ |
+| `Failed to execute child process "eu-strip"` | the runner has no `elfutils` (flatpak-builder needs it to split the debuginfo) | `elfutils` installed ✓ |
+
+Two of them were also **real packaging bugs** that the CI found and the local
+build had masked with `--nodeps --nocheck`:
+
+* the agent's `BuildRequires: pkgconfig(glib2)` — a virtual no package
+  provides; the real name is `pkgconfig(glib-2.0)` ✓;
+* the app's `%check` ran `appstream-util`, removed from appstream 1.0
+  (Fedora 40+); it now runs `appstreamcli validate --no-net` ✓.
+
+Both packages now build with their `%check` enabled ✓, and the artefacts
+were rebuilt from the fixed tree ✓.
+
+---
+
+## 3. The remaining decisions
 
 | # | decision | the recommendation |
 |---|---|---|
-| **Q1** | the staged change removes `v1.2.4`'s "open maximized" line ✗ and uses this branch's sidebar metrics (220/56/36 ✗ vs 250/68/28 ✗) ✗ — ship it, or restore v1.2.4's UI and **rebuild all four artefacts** ✗? | **ship it** ✓ — the artefacts are verified ✓ and the metrics are this project's own tuning ✓ |
-| **Q2** | the branch name `release/1.2.5` ✓ | as-is ✓ |
-| **Q3** | the release branch: `10.2` (the upstream's release line ✓) or `main` (still at v0.4.0 ✗)? | **`10.2`** ✓ — moving `main` would rewrite the upstream's default branch ✗ |
-| **Q4** | the commit message and the author | the repository's own identity is already configured ✓ (`Mostafamomen` ✗ / the maintainer's address ✗) ✓ |
+| **Q1** | publish the draft | **not yet** — one word from you and it goes out ✓ |
+| **Q2** | the tag stays at `26a86bd` while the branch tip is `55b4a3a` | leave it ✓ — the difference is a single CI-only commit ✗ that does not touch a single packaged file ✓, and moving a tag would need a force-push ✗ |
+| **Q3** | the branch `release/1.2.5` and the branch `1.25` both exist | keep both ✓ — `1.25` is the release line in the upstream's naming style ✓, `release/1.2.5` is the working branch ✓ |
 
 ---
 
-## 4. The proposed actions, in order — **each needs your approval**
-
-Nothing below has been done ✓.
-
-### Step 1 — the commit (local only ✓)
-
-```sh
-git commit -m "release: ASUSCraft 1.2.5 — the Flatpak build and the host agent
-
-  The Flatpak GUI and the separately packaged host agent (asuscraft-agent).
-  The agent is unprivileged: the whitelist-only helper and the polkit
-  action io.github.asuscontrolcenter.helper are unchanged.
-
-  The night light reads and writes the GNOME colour schema and keeps the
-  KDE path; the touchpad uses the desktop's own setting and the obsolete
-  xinput path is gone; the Soft Dimmer integration is removed and Soft
-  Brightness Plus is kept.
-
-  The version is 1.2.5 in the Makefile, both RPM specifications, the
-  changelog and the AppStream metadata.
-
-  Fix a double free in the System Diagnosis SMART check and one in the
-  night light's error path."
-```
-
-### Step 2 — the push (the first time this code reaches GitHub ✗)
-
-```sh
-git push -u origin release/1.2.5
-```
-
-**Never** `--force` ✗ ✓.
-
-### Step 3 — watch the CI ✓
-
-The first push triggers three workflows ✗ ✓ — `ci.yml` ✓, `flatpak.yml`'s
-manifest job ✓ and `packages.yml` ✓. **Nothing is published until they are
-green ✓** ✗.
-
-### Step 4 — the tag (only after the CI is green ✓)
-
-```sh
-git tag -a v1.2.5 -m "ASUSCraft 1.2.5"
-git push origin v1.2.5
-```
-
-### Step 5 — the draft release ✗
-
-```sh
-gh release create v1.2.5 --draft \
-  --title "ASUSCraft 1.2.5" \
-  --notes-file GITHUB_RELEASE_NOTES_1.2.5.md \
-  dist/asus-control-center-1.2.5-1.fc45.x86_64.rpm \
-  dist/asuscraft-agent-1.2.5-1.fc45.x86_64.rpm \
-  dist/asus-control-center_1.2.5_amd64.deb \
-  dist/io.github.asuscontrolcenter.asuscraft_1.2.5.flatpak \
-  dist/SHA256SUMS.txt
-```
-
-**`--draft`** ✗ — the release is created as a draft ✓ and is **not**
-published ✗ ✓. The installation instructions are in the notes ✓; they can
-also be attached as a separate file if you prefer ✗.
-
-### Step 6 — the publication ✗
-
-A **separate, explicit** approval ✗ — `gh release edit v1.2.5 --draft=false`
-✗ ✗.
-
----
-
-## 5. The stop conditions
+## 4. The stop conditions — all honoured
 
 | | |
 |---|---|
-| the commit | **not made** ✓ — waiting for the approval ✓ |
-| the push | **not done** ✓ |
-| the tag | **not created** ✓ |
-| the release | **not created** ✓ — it will be a **draft** ✓ |
-| the publication | **not done** ✓ — a separate approval ✗ |
-| the force-push | **never** ✓ |
-| the upstream's history | **untouched** ✓ |
-| `dist/preserved-10.2/` | **untouched** ✓ |
-| the backups | **all twelve intact** ✓ |
+| the release is **not** published | ✓ it is a draft ✓ |
+| `main` was not modified | ✓ it still points at the upstream's `v0.4.0` commit ✓ |
+| no force-push | ✓ every push was a normal fast-forward ✓ |
+| the preserved 10.2 artefacts | ✓ `dist/preserved-10.2/` untouched ✓ |
+| the backups | ✓ all thirteen intact ✓ |
+| the native installation | ✓ `asus-control-center-1.0.0-1.fc44` untouched ✓ |
+| the Flatpak and polkit permissions | ✓ unchanged, and guarded by `flatpak/verify-permissions.sh` ✓ |
+| the Soft Dimmer integration | ✓ removed, not reintroduced ✓ |
+| the D-Bus API | ✓ additive only ✓ |
+
+---
+
+## 5. Publishing, when you say so
+
+```sh
+gh release edit v1.2.5 --draft=false
+```
+
+That is the whole publication step ✓ — one command ✓.
