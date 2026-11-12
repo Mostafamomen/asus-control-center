@@ -1,3 +1,48 @@
+asus-control-center (1.2.5) unstable; urgency=medium
+
+  * The Flatpak distribution, plus the separately packaged host agent
+    (asuscraft-agent): a thin, unprivileged, D-Bus-activated session
+    service that lets the sandboxed app reach the machine.
+  * The host agent holds no privilege of its own: the whitelist-only
+    helper and the polkit action io.github.asuscontrolcenter.helper are
+    unchanged.
+  * Cross-DE support: GNOME 51 and KDE Plasma 6.8.
+  * The night light reads and writes the GNOME settings-daemon colour
+    schema (enabled, colour temperature, schedule) and keeps the KDE path.
+  * The touchpad uses the desktop's own setting; the obsolete xinput path
+    is gone.
+  * The desktop-environment probe (desktop.cpp) is cached at startup.
+  * Fix a double free in the System Diagnosis SMART check (it aborted the
+    application on start) and one in the night light's error path.
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Thu, 12 Nov 2026 09:40:00 +0300
+
+asus-control-center (1.0.0) unstable; urgency=medium
+
+  * System Manager: health overview, CPU/RAM monitoring, Smart Recommendations,
+    Quick Actions, health history.
+  * Software Center: installed apps, pending updates, driver and diagnostics.
+  * Fix memory leak in health-history directory creation.
+  * Fix stale helper exit code on spawn failure.
+  * Fix health_history.txt file permissions (0600).
+  * Fix dead code in autostart scanner (system entries now counted).
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Mon, 03 Nov 2026 12:00:00 +0300
+
+asus-control-center (0.9.0) unstable; urgency=medium
+
+  * System Manager and Software Center pages added.
+  * System Diagnosis: Hardware and Software check groups expanded.
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Sun, 02 Nov 2026 22:00:00 +0300
+
+asus-control-center (0.6.0) unstable; urgency=medium
+
+  * GPU: fix MUX double-write, verify switch after reboot.
+  * Integrated (Intel Arc) shown unavailable with the reason.
+
+ -- Mostafa Momen <mostafamomen6521@gmail.com>  Mon, 02 Nov 2026 15:30:00 +0300
+
 asus-control-center (0.4.0) unstable; urgency=medium
 
   * First packaged release: RPM and Debian packages.

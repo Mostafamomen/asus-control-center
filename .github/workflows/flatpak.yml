@@ -1,0 +1,107 @@
+name: Flatpak
+
+# The Flatpak manifest is validated on every push (cheap). The Flatpak
+# itself is built only for a release tag or on demand, because it pulls the
+# whole GNOME SDK and is by far the most expensive job in this project.
+#
+# The permission check is the important one: it fails the build if the
+# manifest ever asks for more than the reviewed set.
+
+on:
+  push:
+    branches: [main, release/**]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manifest:
+    name: The manifest and its permissions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The manifest is valid YAML with the expected identity
+        run: |
+          set -eu
+          python3 -c "
+          import yaml
+          d = yaml.safe_load(open('flatpak/io.github.asuscontrolcenter.asuscraft.yml'))
+          assert d['app-id'] == 'io.github.asuscontrolcenter.asuscraft', d['app-id']
+          assert d['runtime'] == 'org.gnome.Platform'
+          assert d['sdk'] == 'org.gnome.Sdk'
+          assert d['command'] == 'asus-control-center'
+          assert d['modules'], 'no modules'
+          print('ok: the manifest parses and its identity is right')
+          "
+      - name: The permissions have not expanded
+        run: ./flatpak/verify-permissions.sh
+      - name: The version policy holds
+        run: ./flatpak/verify-versions.sh 1.2.5
+      - name: The Flatpak's own metainfo carries the release version
+        run: |
+          set -eu
+          version=$(sed -n 's/.*<release version="\([^"]*\)".*/\1/p' \
+            data/io.github.asuscontrolcenter.AsusControlCenter.metainfo.xml | head -1)
+          test "$version" = "1.2.5"
+          echo "ok: the metainfo's newest release is $version"
+
+  build:
+    name: The Flatpak builds and passes its gates
+    # Expensive: it pulls the GNOME SDK. Release tags and manual runs only.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Flatpak tooling
+        run: |
+          set -eu
+          sudo apt-get update -qq
+          # elfutils provides eu-strip/eu-elfcompress, which flatpak-builder
+          # needs to split the debuginfo out of the binary
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils
+          flatpak --user remote-add --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak --user install -y flathub org.gnome.Sdk//46 org.gnome.Platform//46
+      - name: Build the Flatpak
+        run: |
+          set -eu
+          flatpak-builder --user --install --force-clean build \
+            flatpak/io.github.asuscontrolcenter.asuscraft.yml
+      - name: The application id and the version are right
+        run: |
+          set -eu
+          app=$(flatpak --user list --app --columns=application | grep asuscraft)
+          test "$app" = "io.github.asuscontrolcenter.asuscraft"
+          version=$(flatpak --user info io.github.asuscontrolcenter.asuscraft | sed -n 's/^[[:space:]]*Version:[[:space:]]*//p')
+          test "$version" = "1.2.5"
+          echo "ok: $app is $version"
+      - name: The installed permissions are the reviewed ones
+        run: |
+          set -eu
+          flatpak --user info --show-permissions io.github.asuscontrolcenter.asuscraft \
+            | tee /tmp/perms
+          for bad in --device=all --filesystem=host --allow=devel \
+                     --system-talk-name=org.freedesktop.DBus; do
+            if grep -q -- "$bad" /tmp/perms; then
+              echo "FAIL: the built Flatpak asks for $bad"; exit 1
+            fi
+          done
+          grep -q '^filesystems=xdg-run/dconf;$' /tmp/perms
+          echo "ok: the built Flatpak's permissions are unchanged"
+      - name: The application's gates pass inside the sandbox
+        run: |
+          set -eu
+          flatpak run io.github.asuscontrolcenter.asuscraft --check
+          flatpak run io.github.asuscontrolcenter.asuscraft --self-test
+          echo "ok: the Flatpak's gates pass"
+      - name: Export the single-file bundle for the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -eu
+          flatpak build-bundle build \
+            "io.github.asuscontrolcenter.asuscraft_1.2.5.flatpak" \
+            io.github.asuscontrolcenter.asuscraft
+          ls -l *.flatpak

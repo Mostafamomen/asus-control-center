@@ -19,6 +19,7 @@
 #include "../probe/probe.h"
 #include "../probe/devs.h"
 #include "../control/brightness.h"
+#include "../control/nightlight.h"
 
 #include <adwaita.h>
 
@@ -311,17 +312,7 @@ acc_specs_show (GtkWindow *parent)
                     h.t_cpu >= 0 || h.t_board >= 0, "performance");
     add_status_row (sup, acc_tr (ACC_T_SOFTDIM),
                     acc_brightness_available (), "display");
-    gboolean night = FALSE;
-    GSettingsSchemaSource *ss = g_settings_schema_source_get_default ();
-    if (ss)
-      {
-        GSettingsSchema *sch = g_settings_schema_source_lookup
-          (ss, "org.gnome.settings-daemon.plugins.color", TRUE);
-        night = sch != NULL;
-        if (sch)
-          g_settings_schema_unref (sch);
-      }
-    add_status_row (sup, acc_tr (ACC_T_NIGHT), night, "display");
+    add_status_row (sup, acc_tr (ACC_T_NIGHT), acc_nightlight_available (), "display");
     add_status_row (sup, acc_tr (ACC_T_CAP_HELPER),
                     g_file_test ("/usr/libexec/asus-control-center/acc-helper",
                                  G_FILE_TEST_IS_EXECUTABLE), "settings");

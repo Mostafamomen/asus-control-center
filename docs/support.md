@@ -1,6 +1,6 @@
 # ASUS laptop support list
 
-**ASUS Control Center has no model whitelist.** It does not look up your SKU in a
+**ASUSCraft has no model whitelist.** It does not look up your SKU in a
 table and it never hides a control because "this model isn't listed". At start-up
 the app probes the firmware interfaces that Linux exposes and enables exactly the
 controls it finds. That is why the same build works on a 2018 Vivobook and a 2025

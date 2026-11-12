@@ -4,21 +4,21 @@
   <id>io.github.asuscontrolcenter.AsusControlCenter</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
-  <name>ASUS Control Center</name>
-  <summary>Battery, performance, GPU and display controls for ASUS laptops</summary>
+  <name>ASUSCraft</name>
+  <summary>Intelligent ASUS Laptop Management</summary>
   <developer id="io.github.mostafamomen">
     <name>Mostafa Momen</name>
   </developer>
   <description>
     <p>
-      ASUS Control Center is a community-built app that brings the hardware
+      ASUSCraft is a community-built app that brings the hardware
       information and controls of an ASUS laptop into one window. It is not
       affiliated with or endorsed by ASUS.
     </p>
     <ul>
       <li>Battery charge limits and charging modes</li>
       <li>Quiet, Balanced and Performance profiles</li>
-      <li>GPU MUX switching and iGPU-only mode</li>
+      <li>GPU MUX switching (Hybrid and Ultimate modes)</li>
       <li>Keyboard backlight and touchpad controls</li>
       <li>Fan, temperature and GPU monitoring</li>
       <li>OLED-friendly display dimming and eye-care modes</li>
@@ -69,12 +69,50 @@
     <keyword>oled</keyword>
   </keywords>
   <releases>
+    <release version="1.2.5" date="2026-11-12">
+      <description>
+        <p>The Flatpak distribution and the separately packaged host agent, with cross-desktop-environment support.</p>
+        <ul>
+          <li>ASUSCraft now ships as a Flatpak; the hardware controls and the host commands are reached through the host agent (asuscraft-agent)</li>
+          <li>The host agent is unprivileged: the whitelist-only helper and its polkit action are unchanged</li>
+          <li>GNOME 51 and KDE Plasma 6.8 compatibility</li>
+          <li>The night light reads and writes the GNOME colour schema (enabled, colour temperature, schedule) and keeps the KDE path</li>
+          <li>The touchpad uses the desktop's own setting; the obsolete xinput path is gone</li>
+          <li>The desktop-environment probe is cached at startup and unsupported controls are greyed out automatically</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.0.0" date="2026-11-03">
+      <description>
+        <p>First stable release.</p>
+        <ul>
+          <li>System Manager: health overview, CPU/RAM monitoring, Smart Recommendations, Quick Actions, health history</li>
+          <li>Software Center: installed apps, pending updates, driver and diagnostics overview</li>
+          <li>Fix memory leak in health-history directory creation</li>
+          <li>Fix stale helper exit code on spawn failure</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.9.0" date="2026-11-02">
+      <description>
+        <p>System Manager and Software Center pages; expanded System Diagnosis.</p>
+      </description>
+    </release>
+    <release version="0.6.0" date="2026-11-02">
+      <description>
+        <p>GPU MUX double-write fix; post-reboot switch verification; honest Integrated status.</p>
+      </description>
+    </release>
+    <release version="0.5.0" date="2026-10-31">
+      <description>
+        <p>Colored app icon; RPM packaging fixes; security hardening of polkit helper.</p>
+      </description>
+    </release>
     <release version="0.4.0" date="2026-10-29">
       <description>
         <p>First packaged release, with RPM and Debian packages.</p>
         <ul>
           <li>Separate hardware backlight slider next to OLED dimming</li>
-          <li>iGPU-only mode via supergfxd</li>
           <li>OLED dimming via the bundled Soft Brightness Plus extension</li>
           <li>Layout, colours and fonts in the style of MyASUS</li>
         </ul>

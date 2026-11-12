@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "ctl.h"
+#include "commands.h"
+#include "hostcmd.h"
 #include "../probe/probe.h"
 #include <gio/gio.h>
 #include <string.h>
@@ -14,7 +16,12 @@ static int s_last_exit = 0;   /* exit status of the last helper run */
 gboolean
 acc_ctl_available (void)
 {
-  return acc_path_exists (PKEXEC) && acc_path_exists (HELPER);
+  /* the helper itself, here ... */
+  if (acc_path_exists (PKEXEC) && acc_path_exists (HELPER))
+    return TRUE;
+  /* ... or on the host, through the agent (a sandbox cannot see
+   * /usr/libexec) */
+  return acc_host_agent_ready ();
 }
 
 gboolean
@@ -23,8 +30,10 @@ acc_ctl_helper_stale (void)
   gchar *txt = NULL;
   if (!g_file_get_contents (HELPER, &txt, NULL, NULL) || !txt)
     return FALSE;
-  /* helper v2 introduced the asus-armoury path + read-back verification */
-  gboolean stale = strstr (txt, "armoury_file") == NULL;
+  /* helper v2 introduced the asus-armoury path + read-back verification;
+   * v3 confirms MUX writes by pending_reboot (exit 5 = unconfirmed) */
+  gboolean stale = strstr (txt, "armoury_file") == NULL
+                   || strstr (txt, "pending_reboot") == NULL;
   g_free (txt);
   return stale;
 }
@@ -34,36 +43,35 @@ acc_ctl_run (const gchar *action, const gchar *arg, gchar **err)
 {
   if (err)
     *err = NULL;
-  if (!acc_ctl_available ())
+
+  /* Validate action and value against the helper's whitelist before
+   * touching anything privileged. The same list lives in
+   * src/control/commands.cpp, so the app, the agent and the helper all
+   * agree on what is allowed. */
+  if (!acc_command_helper_action_ok (action)
+      || !arg || !*arg
+      || !acc_command_helper_value_ok (action, arg))
+    {
+      if (err)
+        *err = g_strdup ("invalid action or argument");
+      return FALSE;
+    }
+
+  /* The helper has to be reachable: either on this machine, or on the host
+   * the agent serves (a Flatpak cannot see /usr/libexec itself). */
+  if (!acc_ctl_available () && !acc_host_agent_ready ())
     {
       if (err)
         *err = g_strdup ("helper not installed");
       return FALSE;
     }
 
-  const gchar *argv[] = { PKEXEC, HELPER, action, arg, NULL };
-  GError *e = NULL;
-  GSubprocessLauncher *l = g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_NONE);
-  GSubprocess *p = g_subprocess_launcher_spawnv (l, argv, &e);
-  g_object_unref (l);
-
-  if (!p)
-    {
-      if (err)
-        *err = g_strdup (e ? e->message : "spawn failed");
-      g_clear_error (&e);
-      return FALSE;
-    }
-
-  gboolean ok = g_subprocess_wait_check (p, NULL, &e) ;
+  gint code = -1;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
+  gboolean ok = acc_host_set_hardware (action, arg, &code, &how, err);
   /* remember how it ended: helper exit codes carry the reason
    * (3 = modules in use), pkexec returns 127 when auth is dismissed */
-  s_last_exit = g_subprocess_get_exit_status (p) & 0xff;
-  if (!ok && err)
-    *err = g_strdup (e ? e->message
-                       : "authorization denied or action failed");
-  g_clear_error (&e);
-  g_object_unref (p);
+  s_last_exit = code;
   return ok;
 }
 

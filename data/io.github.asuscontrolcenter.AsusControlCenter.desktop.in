@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=ASUS Control Center
-Comment=Battery, performance, GPU and display controls for ASUS laptops
+Name=ASUSCraft
+Comment=Intelligent ASUS Laptop Management
 Exec=@BIN@/asus-control-center
 Icon=io.github.asuscontrolcenter.AsusControlCenter
 Categories=System;HardwareSettings;

@@ -9,9 +9,11 @@
 
 #include <gio/gio.h>
 #include <glib.h>
+#include <glib/gstdio.h>
 
 static gboolean s_dark = FALSE;
 static gboolean s_gray = FALSE;
+static gboolean s_notify = TRUE;
 
 static gchar *
 pref_path (void)
@@ -30,6 +32,8 @@ acc_theme_load_pref (void)
     {
       s_dark = g_key_file_get_boolean (kf, "theme", "dark", NULL);
       s_gray = g_key_file_get_boolean (kf, "display", "gray", NULL);
+      if (g_key_file_has_key (kf, "app", "notifications", NULL))
+        s_notify = g_key_file_get_boolean (kf, "app", "notifications", NULL);
     }
 
   g_key_file_free (kf);
@@ -83,6 +87,89 @@ acc_theme_save_gray (gboolean gray)
 {
   s_gray = gray;
   save_key ("display", "gray", gray);
+}
+
+gboolean
+acc_pref_notifications (void)
+{
+  return s_notify;
+}
+
+void
+acc_pref_set_notifications (gboolean on)
+{
+  s_notify = on;
+  save_key ("app", "notifications", on);
+}
+
+static gchar *
+autostart_path (void)
+{
+  return g_build_filename (g_get_user_config_dir (), "autostart",
+                           "io.github.asuscontrolcenter.AsusControlCenter.desktop",
+                           NULL);
+}
+
+gboolean
+acc_autostart_enabled (void)
+{
+  gchar *p = autostart_path ();
+  gboolean on = g_file_test (p, G_FILE_TEST_IS_REGULAR);
+  g_free (p);
+  return on;
+}
+
+gboolean
+acc_autostart_set (gboolean on, gchar **err)
+{
+  gchar *p = autostart_path ();
+  gboolean ok = TRUE;
+
+  if (!on)
+    {
+      if (g_file_test (p, G_FILE_TEST_EXISTS))
+        ok = g_remove (p) == 0;
+      if (!ok && err)
+        *err = g_strdup ("Could not remove the autostart entry.");
+      g_free (p);
+      return ok;
+    }
+
+  gchar *dir = g_path_get_dirname (p);
+  g_mkdir_with_parents (dir, 0700);
+  g_free (dir);
+
+  gchar *exe = g_file_read_link ("/proc/self/exe", NULL);
+  if (!exe)
+    {
+      if (err)
+        *err = g_strdup ("Could not find the ASUSCraft executable.");
+      g_free (p);
+      return FALSE;
+    }
+
+  gchar *quoted = g_shell_quote (exe);
+  gchar *body = g_strdup_printf (
+    "[Desktop Entry]\n"
+    "Type=Application\n"
+    "Name=ASUSCraft\n"
+    "Comment=Intelligent ASUS Laptop Management\n"
+    "Exec=%s\n"
+    "Icon=io.github.asuscontrolcenter.AsusControlCenter\n"
+    "Terminal=false\n"
+    "X-GNOME-Autostart-enabled=true\n"
+    "X-KDE-autostart-enabled=true\n",
+    quoted);
+  GError *e = NULL;
+  ok = g_file_set_contents (p, body, -1, &e);
+  if (!ok && err)
+    *err = g_strdup (e ? e->message : "Could not write the autostart entry.");
+  g_clear_error (&e);
+  g_free (body);
+  g_free (quoted);
+  g_free (exe);
+  g_free (p);
+  return ok;
 }
 
 gboolean
@@ -173,8 +260,8 @@ acc_asset_path (const gchar *name)
 const gchar *
 acc_theme_col_accent (void)
 {
-  /* MyASUS blue; the dark skin uses its lighter tint for contrast. */
-  return s_dark ? "#4CA0FF" : "#006CE1";
+  /* ASUSCraft teal/cyan identity; the dark skin uses a brighter tint. */
+  return s_dark ? "#22D3EE" : "#0891B2";
 }
 
 const gchar *

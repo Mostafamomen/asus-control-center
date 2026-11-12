@@ -17,7 +17,7 @@ This page covers what changed when M2 controls went live.
 
 ## The helper is whitelist-only
 
-`data/acc-helper` (installed 0755 at `/usr/local/bin/acc-helper`) is a bash
+`data/acc-helper` (installed 0755 at `/usr/libexec/asus-control-center/acc-helper`) is a bash
 case-statement: **every action and every accepted value is a hard-coded
 literal**. A wrong value exits 2 without touching anything. Accepted today:
 
@@ -48,10 +48,20 @@ hypothetical shell metacharacter could not be interpreted.
 ## polkit action
 
 `data/io.github.asuscontrolcenter.AsusControlCenter.policy` authorizes
-`io.github.asuscontrolcenter.AsusControlCenter.*` for the **active local
-session** only (auth_admin = your password, first change per session).
+`io.github.asuscontrolcenter.helper` for the **active local session** only.
 It grants nothing else — no other user, no other machine, no inactive
-sessions. Never weakened during redesign.
+sessions. The `allow_gui` annotation has been removed because the helper
+does not require GUI environment access (it only writes to sysfs).
+
+Authorization defaults:
+- `allow_any`: `auth_admin` (password required)
+- `allow_inactive`: `auth_admin` (password required)
+- `allow_active`: `auth_admin_keep` (cached for the session after first auth)
+
+`auth_admin_keep` caches authentication for the session after the first
+successful password entry, improving usability while still requiring
+admin authorization. This is appropriate for a hardware control panel
+where the user may make multiple changes in one session.
 
 ## Safety rules honored by the code
 
@@ -71,7 +81,71 @@ sessions. Never weakened during redesign.
 5. **Failing probes** never overwrite the last valid reading with a
    misleading zero; unavailable is shown as "—".
 
-## Build hygiene
+## Security Audit (M4 — 2026-10-30)
+
+### Issues Found and Fixed
+
+1. **`allow_gui=true` annotation (Medium)** — Removed from the polkit policy.
+   The helper does not require GUI environment access; it only writes to
+   sysfs. Keeping `allow_gui=true` exposed the helper to GUI-related
+   attack surface unnecessarily.
+
+2. **Missing argument validation in helper (Low)** — Added explicit
+   argument-count check (`$#` must be 1 or 2). Previously, missing
+   arguments relied on `set -u` to fail, which produced unclear error
+   messages. Now the helper prints a usage message and exits 1.
+
+3. **Attribute name validation in `armoury_file()` (Low)** — Added a
+   case-statement allowlist for firmware attribute names (`charge_mode`,
+   `gpu_mux_mode`). Previously, the attribute name was interpolated
+   directly into a sysfs path without validation. Defense-in-depth
+   against path traversal even though callers always pass hardcoded names.
+
+4. **Unsafe glob in `wmi_file()` (Low)** — Removed the broad
+   `/sys/devices/platform/asus*` glob that could match unintended
+   directories. Now only checks the two known paths
+   (`asus-nb-wmi` and `asus-wmi`).
+
+5. **Missing action validation in `ctl.cpp` (Low)** — Added a whitelist
+   check for the `action` parameter in `acc_ctl_run()` before spawning
+   the helper. Previously, any string was passed through to pkexec.
+   The helper itself also validates, but client-side validation provides
+   defense in depth.
+
+6. **Helper path inconsistency (Medium)** — All references updated from
+   `/usr/local/bin/acc-helper` to `/usr/libexec/asus-control-center/acc-helper`
+   for FHS compliance. The install script now installs to the new path
+   and removes the old one. The polkit policy and C++ code are consistent.
+
+### Remaining Risks
+
+- `auth_admin_keep` caches authentication for the session. If the user
+  walks away from an unlocked session, an attacker could invoke privileged
+  operations without re-entering a password. This is a usability/security
+  trade-off; users on shared machines may prefer `auth_admin` (always prompt).
+- The helper is a Bash script. While all values are whitelisted, Bash
+  parsing could have edge cases. A future rewrite in C would eliminate
+  this risk entirely.
+- The `wmi_file` fallback only checks two known paths. On unusual hardware
+  configurations, the helper may fail to find the sysfs node.
+
+### Manual Tests Recommended
+
+1. Run `./install.sh` and verify the helper is installed at the new path.
+2. Run `./asus-control-center --self-test` and confirm all controls pass.
+3. Test authorization cancellation: click a control, dismiss the polkit
+   prompt, verify the UI reverts to the previous state.
+4. Test invalid values: `bash data/acc-helper "set-charge" "999"` should
+   exit 2 without touching hardware.
+5. Test missing args: `bash data/acc-helper` should print usage and exit 1.
+6. Verify the policy XML: `xmllint --noout data/...policy`.
+7. Check that no `allow_gui` annotation remains in the policy.
+
+### Vulnerability Reporting
+
+To report a security vulnerability, please open a private issue on GitHub
+or contact the maintainer directly. Do not disclose vulnerabilities
+publicly before a fix is available.
 
 `make` builds everything with `-Wall -Wextra` → **0 warnings** (GCC 16).
 - Owned strings are freed (`dispose` implementations added for the Cairo
