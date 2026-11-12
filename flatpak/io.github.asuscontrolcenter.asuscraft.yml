@@ -1,0 +1,63 @@
+# ASUSCraft — Flatpak manifest
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Build:
+#   flatpak-builder --user --install build flatpak/io.github.asuscontrolcenter.asuscraft.yml
+#
+# The application id is lower case because a Flatpak id may not contain
+# capitals. The native package keeps io.github.asuscontrolcenter.AsusControlCenter
+# (that id is what the polkit action, the desktop file and the dconf path
+# already use) and both are shipped side by side.
+#
+# The host agent (asuscraft-agent) is a SEPARATE package. The Flatpak works
+# without it; the controls that need the host say so instead of failing
+# quietly. See docs/host-agent-install.md.
+
+app-id: io.github.asuscontrolcenter.asuscraft
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+command: asus-control-center
+
+# ---------------------------------------------------------------------------
+# The permissions, and why each one is here. Nothing else is granted:
+#   - no --filesystem=host        (/sys and /proc are readable in a sandbox)
+#   - no --device=all             (the hardware is read through /sys)
+#   - no unrestricted system bus  (two named services, nothing more)
+#   - no root, ever
+finish-args:
+  # the panel brightness, through logind
+  - --system-talk-name=org.freedesktop.login1
+  # asusd: the performance profile and the GPU MUX
+  - --system-talk-name=xyz.ljones.Asusd
+  # the host agent: the privileged writes and the host commands
+  - --talk-name=io.github.asuscontrolcenter.Agent
+  # the Soft Brightness Plus extension: the dimming value (dconf)
+  - --talk-name=org.gnome.shell.extensions.soft-brightness-plus
+  # the settings (dconf) - the touchpad and the eye-care settings
+  - --talk-name=ca.desrt.dconf
+  # dconf keeps a shared-memory snapshot in the runtime directory. Without
+  # this one directory the client falls back to an empty private database,
+  # and the settings would never reach the host: the touchpad switch, the
+  # eye-care mode and the OLED dimming value would all be no-ops.
+  # It is the narrowest filesystem permission there is: one directory,
+  # inside the runtime dir, owned by the user.
+  - --filesystem=xdg-run/dconf
+  # the Software portal - the software centre button
+  - --talk-name=org.freedesktop.portal.Desktop
+
+modules:
+  - name: asuscraft
+    buildsystem: simple
+    sources:
+      - type: dir
+        path: ..
+    build-commands:
+      - make
+      # installs into /app: the binary, the desktop file, the icons, the
+      # AppStream metainfo, the man page, the themes and the bundled Soft
+      # Brightness Plus (with its schema, so the dimming value still
+      # reaches the host's dconf)
+      - make install-flatpak
+      # the helper and the polkit policy are NOT installed here: they live
+      # on the host and the host agent invokes them

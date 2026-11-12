@@ -2,20 +2,28 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include <adwaita.h>
+#include <locale.h>
 #include <string.h>
 #include <sys/utsname.h>
 
 #include "i18n/i18n.h"
 #include "ui/window.h"
 #include "ui/home.h"
+#include "ui/sysmgr.h"
 #include "ui/login.h"
 #include "user/user.h"
 #include "control/backlight.h"
 #include "control/brightness.h"
 #include "control/asusd.h"
 #include "control/gfx.h"
+#include "control/muxreq.h"
 #include "control/softdim.h"
+#include "control/nightlight.h"
+#include "control/touchpadctl.h"
+#include "control/commands.h"
+#include "control/hostcmd.h"
 #include "probe/probe.h"
+#include "probe/desktop.h"
 #include "probe/devs.h"
 #include "probe/battery.h"
 #include "probe/dmi.h"
@@ -105,7 +113,7 @@ self_test (void)
   acc_brightness_init (NULL, NULL);   /* for the OLED dim availability line */
 
   g_print ("==========================================================\n");
-  g_print ("  ASUS Control Center — laptop report (read-only)\n");
+  g_print ("  ASUSCraft — laptop report (read-only)\n");
   g_print ("==========================================================\n");
 
   /* ---------------- device ---------------- */
@@ -298,7 +306,8 @@ self_test (void)
                   : gs.current == 0 ? "0 (ultimate/dGPU)" : "1 (hybrid)");
         r_field ("MUX queued", gs.queued < 0 ? "nothing"
                   : gs.queued == 0 ? "0 (ultimate/dGPU)" : "1 (hybrid)");
-        r_field ("asus-shutdown", gs.shutdown_ready ? "ready" : "disabled");
+        r_field ("asus-shutdown", !gs.shutdown_known ? NULL
+                  : gs.shutdown_ready ? "ready" : "disabled");
       }
     else
       {
@@ -344,13 +353,19 @@ self_test (void)
   }
   {
     AccGfxState gx;
-    gboolean up = acc_gfx_state_sync (&gx);
-    r_cap (up && gx.can_integrated, "iGPU only (supergfxd)",
-           !gx.installed ? "supergfxctl not installed"
-           : !up ? "supergfxd not running"
-           : !gx.can_integrated ? "Integrated not offered"
-           : gx.mode == ACC_GFX_INTEGRATED ? "Integrated (active)"
-           : "Integrated available, finishes at logout");
+    acc_gfx_state (&gx);
+    r_cap (acc_gfx_integrated_supported (&gx), "Integrated (iGPU only)",
+           gx.has_dgpu_disable ? "dgpu_disable present, not verified on this model"
+                               : "no firmware dGPU switch (dgpu_disable)");
+    r_cap (gx.pm == ACC_DGPU_PM_SUSPENDED, "dGPU runtime power",
+           gx.pm == ACC_DGPU_PM_SUSPENDED ? "suspended (D3)"
+           : gx.pm == ACC_DGPU_PM_ACTIVE ? (gx.holders[0] ? gx.holders : "active")
+           : "unknown");
+    if (gx.supergfxd_running)
+      r_cap (FALSE, "supergfxd", "running (can conflict with asusd)");
+    if (gx.supergfx_leftover)
+      r_cap (FALSE, "supergfxd leftover",
+             "/etc/modprobe.d/supergfxd.conf blacklists nvidia");
   }
   {
     gchar *kbd = acc_dev_kbd_led_file ();
@@ -392,21 +407,20 @@ self_test (void)
     g_free (d2);
   }
   {
-    GSettingsSchemaSource *ss = g_settings_schema_source_get_default ();
-    GSettingsSchema *sch = ss
-      ? g_settings_schema_source_lookup
-          (ss, "org.gnome.settings-daemon.plugins.color", TRUE) : NULL;
-    r_cap (sch != NULL, "Night light",
-           sch ? "GSettings available" : "schema not installed");
-    if (sch)
-      g_settings_schema_unref (sch);
+    gboolean nl = acc_nightlight_available ();
+    r_cap (nl, "Night light / Night color",
+           nl ? "backend available" : "no supported backend on this DE");
   }
   {
-    gboolean ok = g_file_test ("/usr/libexec/asus-control-center/acc-helper",
-                               G_FILE_TEST_IS_EXECUTABLE);
-    r_cap (ok, "Polkit helper (writes)",
-           ok ? "/usr/libexec/asus-control-center/acc-helper installed"
-              : "run ./install.sh with sudo");
+    /* the helper lives on the host: a sandbox reaches it through the
+     * agent, and says so instead of claiming it is missing */
+    gboolean here = g_file_test ("/usr/libexec/asus-control-center/acc-helper",
+                                  G_FILE_TEST_IS_EXECUTABLE);
+    gboolean via_agent = !here && acc_host_agent_ready ();
+    r_cap (here || via_agent, "Polkit helper (writes)",
+           here ? "/usr/libexec/asus-control-center/acc-helper installed"
+                : via_agent ? "on the host, through the host agent"
+                            : "run ./install.sh with sudo");
   }
 
   r_cap (acc_user_selftest (), "Sign-in password hashing",
@@ -461,16 +475,149 @@ on_shutdown (GtkApplication *app, gpointer user)
   acc_brightness_shutdown ();
 }
 
+/* `--check`: assertion tests for the pure logic behind hardware decisions.
+ * No hardware is touched; returns the number of failures. */
+static int s_fail = 0;
+
+static void
+expect (gboolean ok, const gchar *what)
+{
+  g_print ("  %s %s\n", ok ? "PASS" : "FAIL", what);
+  if (!ok)
+    s_fail++;
+}
+
+static int
+unit_checks (void)
+{
+  const gchar *b1 = "11111111-2222-3333-4444-555555555555";
+  const gchar *b2 = "aaaaaaaa-2222-3333-4444-555555555555";
+
+  g_print ("MUX request lifecycle\n");
+  expect (acc_muxreq_classify (0, b1, b1, 1) == ACC_MUXREQ_PENDING,
+          "same boot is pending, even though the live value differs");
+  expect (acc_muxreq_classify (0, b1, b2, 0) == ACC_MUXREQ_VERIFIED,
+          "later boot running the requested mode is verified");
+  expect (acc_muxreq_classify (0, b1, b2, 1) == ACC_MUXREQ_FAILED,
+          "later boot still in the old mode is failed");
+  expect (acc_muxreq_classify (1, b1, b2, -1) == ACC_MUXREQ_NONE,
+          "unknown live value claims nothing");
+  expect (acc_muxreq_classify (2, b1, b2, 1) == ACC_MUXREQ_NONE,
+          "out-of-range request is ignored");
+  expect (acc_muxreq_classify (1, NULL, b2, 1) == ACC_MUXREQ_NONE,
+          "record without a boot id is ignored");
+
+  g_print ("MUX failure reason from the journal\n");
+  const gchar *log =
+    "[INFO  asus_shutdown] Applying deferred GPU attribute gpu_mux_mode = 0\n"
+    "asus_armoury: Failed to set current_value: (result): 0x0\n"
+    "[ERROR asusd::asus_armoury] Could not apply queued GPU attribute "
+    "gpu_mux_mode = 0: Io(Os { code: 5 })\n";
+  gchar *r = acc_muxreq_reason_from_log (log);
+  expect (r && g_str_has_prefix (r, "[ERROR asusd::asus_armoury] Could not"),
+          "asusd's line wins over the kernel line");
+  g_free (r);
+  r = acc_muxreq_reason_from_log ("asus_armoury: Failed to set current_value: (result): 0x0\n");
+  expect (r && strstr (r, "Failed to set current_value"),
+          "kernel line is used when asusd said nothing");
+  g_free (r);
+  r = acc_muxreq_reason_from_log ("gpu_mux_mode changed\n");
+  expect (r == NULL, "no failure line gives no reason");
+  g_free (r);
+  expect (acc_muxreq_reason_from_log (NULL) == NULL, "NULL log is safe");
+
+  g_print ("supergfxd leftover detection\n");
+  expect (acc_gfx_text_blacklists_nvidia ("# Automatically generated by supergfxd\n"
+                                          "blacklist nouveau\nblacklist nvidia_drm\n"
+                                          "blacklist nvidia\n"),
+          "supergfxd's Integrated file blacklists nvidia");
+  expect (!acc_gfx_text_blacklists_nvidia ("blacklist nouveau\noptions nvidia-drm modeset=1\n"),
+          "nouveau-only blacklist is not an nvidia blacklist");
+  expect (!acc_gfx_text_blacklists_nvidia ("blacklist nvidia_drm\n"),
+          "nvidia_drm alone does not count");
+  expect (acc_gfx_text_blacklists_nvidia ("  blacklist\tnvidia  \n"),
+          "whitespace variants are recognised");
+  expect (!acc_gfx_text_blacklists_nvidia (NULL), "NULL text is safe");
+
+  g_print ("Integrated mode is never offered unverified\n");
+  AccGfxState st;
+  memset (&st, 0, sizeof st);
+  st.has_dgpu_disable = TRUE;
+  expect (!acc_gfx_integrated_supported (&st),
+          "an unverified dgpu_disable attribute is not used");
+
+  g_print ("the host command table\n");
+  expect (acc_command_from_id ("service-active") == ACC_CMD_SERVICE_ACTIVE,
+          "a command id maps back to its command");
+  expect (acc_command_from_id ("no-such-command") == -1,
+          "an unknown command id is refused");
+  expect (acc_command_from_id (NULL) == -1, "a NULL command id is refused");
+  {
+    gboolean distinct = TRUE;
+    for (gint i = 0; i < ACC_CMD_COUNT && distinct; i++)
+      for (gint j = i + 1; j < ACC_CMD_COUNT; j++)
+        if (g_strcmp0 (acc_command_id ((AccCommand) i),
+                       acc_command_id ((AccCommand) j)) == 0)
+          distinct = FALSE;
+    expect (distinct, "every command has its own id");
+  }
+  expect (acc_command_arg_ok (ACC_CMD_SERVICE_ACTIVE, "asusd"),
+          "asusd is an allowed service");
+  expect (!acc_command_arg_ok (ACC_CMD_SERVICE_ACTIVE, "sshd"),
+          "another service is refused");
+  expect (!acc_command_arg_ok (ACC_CMD_WIFI_SSID, "-rfkill"),
+          "an argument that looks like a flag is refused");
+  expect (!acc_command_arg_ok (ACC_CMD_SMART_HEALTH, "/dev/sdb"),
+          "an unknown block device is refused");
+  expect (!acc_command_arg_ok (ACC_CMD_GNOME_EXT_ENABLE, "not-a-uuid"),
+          "a string that is not an extension uuid is refused");
+
+  g_print ("the helper whitelist\n");
+  expect (acc_command_helper_action_ok ("set-perf"),
+          "set-perf is one of the helper's verbs");
+  expect (!acc_command_helper_action_ok ("set-anything"),
+          "an unknown verb is refused");
+  expect (acc_command_helper_value_ok ("set-charge", "80"),
+          "80 is an allowed charge limit");
+  expect (!acc_command_helper_value_ok ("set-charge", "55"),
+          "55 is not an allowed charge limit");
+  expect (!acc_command_helper_value_ok ("set-kbd", "9"),
+          "9 is not an allowed keyboard level");
+
+  g_print ("the touchpad backend\n");
+  expect (acc_touchpad_available ()
+          || acc_touchpad_backend ()[0] == '\0',
+          "the touchpad reports a backend or reports none");
+
+  g_print ("\n%d failure(s)\n", s_fail);
+  return s_fail;
+}
+
 int
 main (int argc, char **argv)
 {
+  /* The environment's locale decides how the console output is encoded.
+   * GTK does this when the interface starts; the read-only reports have
+   * to do it themselves, or their dashes come out as question marks. */
+  setlocale (LC_ALL, "");
+
+  if (argc > 1 && (strcmp (argv[1], "--version") == 0
+                   || strcmp (argv[1], "-v") == 0))
+    {
+      g_print ("asuscraft %s\n", ACC_VERSION);
+      return 0;
+    }
+
+  if (argc > 1 && strcmp (argv[1], "--check") == 0)
+    return unit_checks () ? 1 : 0;
+
   if (argc > 1 && (strcmp (argv[1], "--self-test") == 0
                    || strcmp (argv[1], "--specs") == 0))
     {
       self_test ();
       acc_brightness_shutdown ();
-      /* non-zero so `make test` fails when the sign-in crypto is broken */
-      return acc_user_selftest () ? 0 : 1;
+      /* non-zero so `make test` fails when the sign-in crypto or System Manager self-test is broken */
+      return (acc_user_selftest () && acc_sysmgr_selftest ()) ? 0 : 1;
     }
 
   /* arabic is the default language of the project */

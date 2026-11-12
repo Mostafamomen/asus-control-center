@@ -10,6 +10,7 @@
 #include "theme.h"
 #include "../user/user.h"
 #include "../i18n/i18n.h"
+#include "../control/hostcmd.h"
 
 #include <adwaita.h>
 #include <string.h>
@@ -205,13 +206,33 @@ submit_cb (GtkButton *b, gpointer user)
 /* Reset deletes the account, so it must not be a way around the password:
  * it asks for the administrator password through Polkit first. The generic
  * pkexec action is auth_admin with no grace period, so it always prompts. */
-static void
-reset_auth_done (GObject *src, GAsyncResult *res, gpointer user)
+typedef struct { LoginUI *login; gboolean ok; } AdminProbe;
+
+static void reset_auth_done (gboolean ok);
+
+static gboolean
+admin_probe_apply (gpointer data)
 {
-  (void) user;
-  GSubprocess *p = G_SUBPROCESS (src);
-  gboolean ok = g_subprocess_wait_check_finish (p, res, NULL);
-  g_object_unref (p);
+  AdminProbe *pr = (AdminProbe *) data;
+  reset_auth_done (pr->ok);
+  g_free (pr);
+  return G_SOURCE_REMOVE;
+}
+
+static gpointer
+admin_probe_worker (gpointer data)
+{
+  AdminProbe *pr = (AdminProbe *) data;
+  gint code = -1;
+  /* the same probe as before: pkexec /usr/bin/true */
+  gboolean ok = acc_host_check_admin (&code);
+  pr->ok = ok;
+  g_idle_add (admin_probe_apply, pr);
+  return NULL;
+}
+static void
+reset_auth_done (gboolean ok)
+{
   if (!L || L->done)
     return;
   gtk_widget_set_sensitive (L->reset, TRUE);
@@ -234,17 +255,13 @@ reset_cb (GtkButton *b, gpointer user)
 {
   (void) b;
   (void) user;
-  const gchar *argv[] = { "/usr/bin/pkexec", "/usr/bin/true", NULL };
-  GError *e = NULL;
-  GSubprocess *p = g_subprocess_newv (argv, G_SUBPROCESS_FLAGS_NONE, &e);
-  if (!p)
-    {
-      g_clear_error (&e);
-      set_error (acc_tr (ACC_T_LOGIN_ERR_ADMIN));
-      return;
-    }
+  /* the polkit probe needs the host: either here (a native install) or
+   * through the host agent (a Flatpak). It waits for a human, so it runs
+   * off the main thread. */
   gtk_widget_set_sensitive (L->reset, FALSE);
-  g_subprocess_wait_check_async (p, NULL, reset_auth_done, NULL);
+  AdminProbe *pr = g_new0 (AdminProbe, 1);
+  pr->login = L;
+  g_thread_unref (g_thread_new ("admin-probe", admin_probe_worker, pr));
 }
 
 /* keep whatever the user already typed when switching EN/ع */
@@ -387,9 +404,9 @@ brand_panel (void)
   gtk_widget_set_margin_start (inner, 40);
   gtk_widget_set_margin_end (inner, 40);
 
-  /* original app logo (assets/logo.png, drawn in logo.svg) */
+  /* ASUSCraft app logo, rendered from assets/asuscraft.svg */
   {
-    gchar *lp = acc_asset_path ("logo.png");
+    gchar *lp = acc_asset_path ("asuscraft-logo.png");
     GtkWidget *pic;
     if (lp)
       {
@@ -411,7 +428,7 @@ brand_panel (void)
   }
 
   gtk_box_append (GTK_BOX (inner),
-                  label ("ASUS Control Center", "loginbrandtitle", 0.5f));
+                  label ("ASUSCraft", "loginbrandtitle", 0.5f));
   {
     GtkWidget *s = label (acc_tr (ACC_T_LOGIN_BRAND_SUB),
                           "loginbrandsub", 0.5f);
@@ -442,14 +459,14 @@ build_window (GtkApplication *app, gboolean create)
   L->done = FALSE;
 
   L->win = GTK_WIDGET (adw_application_window_new (app));
-  gtk_window_set_title (GTK_WINDOW (L->win), "ASUS Control Center");
+  gtk_window_set_title (GTK_WINDOW (L->win), "ASUSCraft");
   gtk_window_set_default_size (GTK_WINDOW (L->win), 940, 700);
 
   /* slim header bar: window controls + light/dark + language, no duplicate title */
   GtkWidget *tv = adw_toolbar_view_new ();
   GtkWidget *hb = gtk_header_bar_new ();
   {
-    GtkWidget *t = gtk_label_new ("ASUS Control Center");
+    GtkWidget *t = gtk_label_new ("ASUSCraft");
     gtk_widget_add_css_class (t, "hbtitle");
     gtk_header_bar_set_title_widget (GTK_HEADER_BAR (hb), t);
 
