@@ -7,35 +7,15 @@
 #include "window.h"
 #include "../i18n/i18n.h"
 #include "../probe/desktop.h"
+#include "../control/hostcmd.h"
+#include "../control/portal.h"
+#include "../probe/probe.h"
 #include <adwaita.h>
 #include <glib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <initializer_list>
-#include <vector>
 
 static GtkWidget *sc_apps, *sc_updates, *sc_drivers, *sc_diag;
-
-static gchar *
-run_cmd (const gchar *const *argv)
-{
-  gchar *out = NULL;
-  gint status = 0;
-  if (g_spawn_sync (NULL, (gchar **) argv, NULL,
-                    (GSpawnFlags)(G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL),
-                    NULL, NULL, &out, NULL, &status, NULL))
-    return out;
-  g_free (out);
-  return NULL;
-}
-
-static gchar *
-run_cmd (std::initializer_list<const gchar *> args)
-{
-  std::vector<const gchar *> v (args);
-  v.push_back (NULL);
-  return run_cmd (v.data ());
-}
 
 static void
 set (GtkWidget *w, const gchar *fmt, ...)
@@ -62,14 +42,47 @@ update_idle (gpointer data)
   return G_SOURCE_REMOVE;
 }
 
+/* Run a host command and keep its first N lines. NULL when the command
+ * could not run at all (no host agent and no program here). */
+static gchar *
+host_cmd (AccCommand id, const gchar *arg, int max_lines)
+{
+  gchar *out = NULL, *err = NULL;
+  gint code = -1;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
+  if (!acc_host_run (id, arg, &out, &code, &how, &err))
+    {
+      g_free (out);
+      g_free (err);
+      return NULL;
+    }
+  g_free (err);
+  if (!out)
+    return NULL;
+
+  /* keep the first N lines */
+  int n = 0;
+  gchar *p = out;
+  while (p && *p && n < max_lines)
+    {
+      gchar *nl = strchr (p, '\n');
+      if (!nl)
+        break;
+      *nl = '\0';
+      p = nl + 1;
+      n++;
+    }
+  if (p && *p && n >= max_lines)
+    *p = '\0';
+  return out;
+}
+
 static gpointer
 scan_apps (gpointer data)
 {
   (void) data;
-  gchar *rpm = run_cmd ({ "sh", "-c",
-    "rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}\\n' 2>/dev/null | head -40", NULL });
-  gchar *flat = run_cmd ({ "sh", "-c",
-    "flatpak list --app --columns=application,version 2>/dev/null | head -40", NULL });
+  gchar *rpm = host_cmd (ACC_CMD_RPM_LIST, NULL, 40);
+  gchar *flat = host_cmd (ACC_CMD_FLATPAK_LIST, NULL, 40);
   GString *s = g_string_new (NULL);
   g_string_append (s, "RPM packages (first 40):\\n");
   if (rpm && *rpm) g_string_append (s, rpm); else g_string_append (s, "none/unavailable\\n");
@@ -88,12 +101,9 @@ static gpointer
 scan_updates (gpointer data)
 {
   (void) data;
-  gchar *dnf = run_cmd ({ "sh", "-c",
-    "command -v dnf >/dev/null && dnf check-update -q 2>/dev/null | head -30 || echo 'DNF unavailable'", NULL });
-  gchar *flat = run_cmd ({ "sh", "-c",
-    "command -v flatpak >/dev/null && flatpak remote-ls --updates 2>/dev/null | head -30 || echo 'Flatpak unavailable'", NULL });
-  gchar *fw = run_cmd ({ "sh", "-c",
-    "command -v fwupdmgr >/dev/null && fwupdmgr get-updates 2>/dev/null | head -30 || echo 'fwupd unavailable'", NULL });
+  gchar *dnf = host_cmd (ACC_CMD_PACKAGE_UPDATES, NULL, 30);
+  gchar *flat = host_cmd (ACC_CMD_FLATPAK_UPDATES, NULL, 30);
+  gchar *fw = host_cmd (ACC_CMD_FIRMWARE_UPDATES, NULL, 30);
   GString *s = g_string_new (NULL);
   g_string_append (s, "DNF updates:\\n");
   if (dnf) { g_string_append (s, dnf); g_free (dnf); }
@@ -113,11 +123,10 @@ static gpointer
 scan_drivers (gpointer data)
 {
   (void) data;
-  gchar *kernel = run_cmd ({ "uname", "-r", NULL });
-  gchar *nvidia = run_cmd ({ "sh", "-c",
-    "nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>/dev/null || echo 'NVIDIA unavailable'", NULL });
-  gchar *lspci = run_cmd ({ "sh", "-c",
-    "lspci | grep -iE 'vga|3d|display' 2>/dev/null", NULL });
+  /* the kernel release is readable straight from /proc */
+  gchar *kernel = acc_read_trim ("/proc/sys/kernel/osrelease");
+  gchar *nvidia = host_cmd (ACC_CMD_NVIDIA_SMI, NULL, 30);
+  gchar *lspci = host_cmd (ACC_CMD_LSPCI, NULL, 40);
   GString *s = g_string_new (NULL);
   g_string_append_printf (s, "Kernel: %s\\n", kernel ? g_strstrip (kernel) : "unknown");
   g_string_append (s, "Graphics controllers:\\n");
@@ -137,12 +146,28 @@ static gpointer
 scan_diag (gpointer data)
 {
   (void) data;
-  gchar *tools = run_cmd ({ "sh", "-c",
-    "for t in dnf flatpak fwupdmgr rpm; do command -v $t >/dev/null && echo \"$t: available\" || echo \"$t: missing\"; done", NULL });
+  /* the tools are on the host: ask the agent whether it can run them */
+  static const AccCommand probe_ids[] = {
+    ACC_CMD_PACKAGE_UPDATES, ACC_CMD_FLATPAK_UPDATES,
+    ACC_CMD_FIRMWARE_UPDATES, ACC_CMD_RPM_LIST
+  };
+  static const gchar *probe_names[] = { "dnf", "flatpak", "fwupdmgr", "rpm" };
+  GString *tools = g_string_new (NULL);
+  for (guint i = 0; i < G_N_ELEMENTS (probe_ids); i++)
+    {
+      gchar *out = NULL, *err = NULL;
+      gint code = -1;
+      AccHostHow how = ACC_HOST_UNAVAILABLE;
+      gboolean ran = acc_host_run (probe_ids[i], NULL, &out, &code, &how, &err);
+      g_free (out);
+      g_free (err);
+      g_string_append_printf (tools, "%s: %s\n", probe_names[i],
+                              ran ? "available" : "missing");
+    }
   GString *s = g_string_new (NULL);
   g_string_append (s, "Software diagnostics:\\n");
-  if (tools) g_string_append (s, tools);
-  g_free (tools);
+  g_string_append (s, tools->str);
+  g_string_free (tools, TRUE);
   ScResult *r = g_new0 (ScResult, 1);
   r->text = g_strdup (s->str);
   r->target = sc_diag;
@@ -195,49 +220,60 @@ ma_clear (GtkWidget *box)
     gtk_box_remove (GTK_BOX (box), c);
 }
 
-static void
-ma_action_done (GObject *src, GAsyncResult *res, gpointer data)
+typedef struct { MaAction *act; gboolean ok; gchar *err; } MaJob;
+
+static gboolean
+ma_job_apply (gpointer data)
 {
-  MaAction *a = (MaAction *) data;
-  GError *err = NULL;
-  GSubprocess *p = G_SUBPROCESS (src);
-  gboolean ok = g_subprocess_wait_check_finish (p, res, &err);
-  if (ok)
+  MaJob *j = (MaJob *) data;
+  if (j->ok)
     acc_ui_toast (MT ("Done.", "تم."));
   else
     {
-      acc_ui_toast (a->kind == 0
+      acc_ui_toast (j->act->kind == 0
         ? MT ("Could not remove it. A system-wide app needs the system software tool.",
               "تعذّر الحذف. التطبيق المثبّت للنظام يحتاج أداة البرمجيات.")
         : MT ("The change did not apply.", "لم يُطبّق التغيير."));
-      if (err) g_warning ("manage-apps: %s", err->message);
+      if (j->err) g_warning ("manage-apps: %s", j->err);
     }
-  g_clear_error (&err);
-  ma_action_free (a);
+  g_free (j->err);
+  ma_action_free (j->act);
+  g_free (j);
   ma_scan ();   /* refresh list */
+  return G_SOURCE_REMOVE;
+}
+
+/* The work happens on the host (the agent), so it runs off the main
+ * thread: the UI must not freeze while a Flatpak is removed. */
+static gpointer
+ma_job_worker (gpointer data)
+{
+  MaJob *j = (MaJob *) data;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
+  gint code = -1;
+  gchar *out = NULL, *err = NULL;
+  gboolean ok = FALSE;
+
+  if (j->act->kind == 0)
+    ok = acc_host_run (ACC_CMD_FLATPAK_UNINSTALL, j->act->id, &out, &code, &how, &err);
+  else if (j->act->kind == 1)
+    ok = acc_host_run (ACC_CMD_GNOME_EXT_ENABLE, j->act->id, &out, &code, &how, &err);
+  else
+    ok = acc_host_run (ACC_CMD_GNOME_EXT_DISABLE, j->act->id, &out, &code, &how, &err);
+
+  g_free (out);
+  j->ok = ok;
+  j->err = err;
+  g_idle_add (ma_job_apply, j);
+  return NULL;
 }
 
 static void
 ma_run_action (MaAction *a)
 {
-  const gchar *argv_rm[]  = { "flatpak", "uninstall", "--user", "-y", a->id, NULL };
-  const gchar *argv_en[]  = { "gnome-extensions", "enable", a->id, NULL };
-  const gchar *argv_dis[] = { "gnome-extensions", "disable", a->id, NULL };
-  const gchar *const *argv = a->kind == 0 ? argv_rm : a->kind == 1 ? argv_en : argv_dis;
-  GError *err = NULL;
-  GSubprocess *p = g_subprocess_newv (argv,
-      (GSubprocessFlags) (G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_SILENCE),
-      &err);
-  if (!p)
-    {
-      acc_ui_toast (MT ("Could not start the operation.", "تعذّر بدء العملية."));
-      if (err) g_warning ("manage-apps: %s", err->message);
-      g_clear_error (&err);
-      ma_action_free (a);
-      return;
-    }
-  g_subprocess_wait_check_async (p, NULL, ma_action_done, a);
-  g_object_unref (p);
+  MaJob *j = g_new0 (MaJob, 1);
+  j->act = a;
+  g_thread_unref (g_thread_new ("manage-apps-action", ma_job_worker, j));
 }
 
 static void
@@ -383,12 +419,26 @@ ma_worker (gpointer data)
   guint gen = GPOINTER_TO_UINT (data);
   MaMsg *m = g_new0 (MaMsg, 1);
   m->gen = gen;
-  m->flat = run_cmd ({ "flatpak", "list", "--app",
-                       "--columns=application,name,version,size", NULL });
+  gchar *out = NULL, *err = NULL;
+  gint code = -1;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
+
+  acc_host_run (ACC_CMD_FLATPAK_LIST, NULL, &out, &code, &how, &err);
+  m->flat = out;
+  g_free (err);
+  err = NULL;
+
   if (acc_desktop_is_gnome ())
     {
-      m->ext_on  = run_cmd ({ "gnome-extensions", "list", "--enabled", NULL });
-      m->ext_off = run_cmd ({ "gnome-extensions", "list", "--disabled", NULL });
+      acc_host_run (ACC_CMD_GNOME_EXT_ENABLED, NULL, &out, &code, &how, &err);
+      m->ext_on = out;
+      out = NULL;
+      g_free (err);
+      err = NULL;
+      acc_host_run (ACC_CMD_GNOME_EXT_DISABLED, NULL, &out, &code, &how, &err);
+      m->ext_off = out;
+      out = NULL;
+      g_free (err);
     }
   g_idle_add (ma_apply, m);
   return NULL;
@@ -410,6 +460,16 @@ static void
 ma_systool_cb (GtkButton *b, gpointer d)
 {
   (void) b; (void) d;
+  /* the desktop's own software centre, through the portal: it works from
+   * a Flatpak, where gnome-software cannot be started directly */
+  gchar *perr = NULL;
+  if (acc_portal_open_software (&perr))
+    {
+      g_free (perr);
+      return;
+    }
+  g_free (perr);
+
   const gchar *argv[] = { "sh", "-c",
     "gnome-software || plasma-discover || flatpak run org.gnome.Software &", NULL };
   GError *err = NULL;

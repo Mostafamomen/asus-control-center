@@ -3,13 +3,13 @@
  */
 #include "gpu.h"
 #include "probe.h"
+#include "../control/hostcmd.h"
 
 #include <gio/gio.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define SMI_PATH "/usr/bin/nvidia-smi"  /* absolute: no PATH hijack */
 #define SMI_CACHE_US (2 * G_USEC_PER_SEC)
 
 /* ------------------------------------------------------------ vendor ---- */
@@ -115,40 +115,27 @@ smi_double (const gchar *s, gdouble fallback)
 }
 
 /* Runs the tool with a fixed argv (never a shell string) and returns its
- * first output line. NULL when the tool is absent, fails, or says nothing. */
+ * first output line. NULL when the tool is absent, fails, or says nothing.
+ * The command goes through the host command layer, so a Flatpak gets the
+ * reading from the host agent. */
 static gchar *
 smi_line (void)
 {
-  const gchar *argv[] = {
-    SMI_PATH,
-    "--query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,"
-    "power.draw,display_active,driver_version,name",
-    "--format=csv,noheader,nounits",
-    NULL
-  };
-
-  GError *e = NULL;
-  GSubprocess *p = g_subprocess_newv
-    (argv,
-     (GSubprocessFlags) (G_SUBPROCESS_FLAGS_STDOUT_PIPE
-                         | G_SUBPROCESS_FLAGS_STDERR_SILENCE),
-     &e);
-  if (!p)
+  gchar *out = NULL, *err = NULL;
+  gint code = -1;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
+  if (!acc_host_run (ACC_CMD_NVIDIA_SMI, NULL, &out, &code, &how, &err))
     {
-      g_clear_error (&e);
-      return NULL;
-    }
-
-  gchar *out = NULL;
-  gboolean ok = g_subprocess_communicate_utf8 (p, NULL, NULL,
-                                               &out, NULL, &e);
-  g_object_unref (p);
-  if (!ok)
-    {
-      g_clear_error (&e);
       g_free (out);
+      g_free (err);
       return NULL;
     }
+  g_free (err);
+
+  /* only the first line carries the reading */
+  gchar *nl = strchr (out, '\n');
+  if (nl)
+    *nl = '\0';
   return out;
 }
 

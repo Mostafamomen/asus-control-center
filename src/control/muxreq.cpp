@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "muxreq.h"
+#include "hostcmd.h"
 #include "../probe/probe.h"
 
 #include <gio/gio.h>
@@ -9,8 +10,6 @@
 #include <string.h>
 
 #define BOOT_ID_FILE "/proc/sys/kernel/random/boot_id"
-#define JOURNALCTL   "/usr/bin/journalctl"
-#define TIMEOUT_BIN  "/usr/bin/timeout"
 
 static gchar *
 req_path (void)
@@ -102,41 +101,27 @@ acc_muxreq_reason_from_log (const gchar *log)
   return hit;
 }
 
-/* The request boot's journal lines about the MUX, capped at 4 s. The
- * desktop user can read the system journal on Fedora (wheel). */
+/* The request boot's journal lines about the MUX. The journal lives on the
+ * host, so the read goes through the host command layer: the desktop user
+ * can read the system journal on Fedora (wheel). */
 static gchar *
 journal_reason (const gchar *boot)
 {
-  if (!acc_path_exists (JOURNALCTL) || !acc_path_exists (TIMEOUT_BIN))
-    return NULL;
   /* boot ids are 36 chars of [0-9a-f-]; anything else is not passed on */
   for (const gchar *c = boot; *c; c++)
     if (!g_ascii_isxdigit (*c) && *c != '-')
       return NULL;
-  gchar *bid = g_strdup (boot);
-  /* journalctl wants the id without dashes */
-  gchar *w = bid;
-  for (const gchar *c = boot; *c; c++)
-    if (*c != '-')
-      *w++ = *c;
-  *w = '\0';
 
-  const gchar *argv[] = { TIMEOUT_BIN, "4", JOURNALCTL, "--no-pager",
-                          "-q", "-o", "cat", "-b", bid,
-                          "-g", "gpu_mux_mode|GPU settings|current_value",
-                          NULL };
-  GSubprocess *p = g_subprocess_newv (argv,
-                                      (GSubprocessFlags)
-                                      (G_SUBPROCESS_FLAGS_STDOUT_PIPE
-                                       | G_SUBPROCESS_FLAGS_STDERR_SILENCE),
-                                      NULL);
-  gchar *out = NULL;
-  if (p)
+  gchar *out = NULL, *err = NULL;
+  gint code = -1;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
+  if (!acc_host_run (ACC_CMD_JOURNAL_MUX, boot, &out, &code, &how, &err))
     {
-      g_subprocess_communicate_utf8 (p, NULL, NULL, &out, NULL, NULL);
-      g_object_unref (p);
+      g_free (out);
+      g_free (err);
+      return NULL;
     }
-  g_free (bid);
+  g_free (err);
   gchar *r = acc_muxreq_reason_from_log (out);
   g_free (out);
   return r;

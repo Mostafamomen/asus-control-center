@@ -11,7 +11,6 @@ GtkWidget *acc_page_customization (AccUI *u);
 GtkWidget *acc_page_hardware      (AccUI *u);
 GtkWidget *acc_page_diagnosis     (AccUI *u);
 GtkWidget *acc_page_updates       (AccUI *u);
-GtkWidget *acc_page_softdimmer    (AccUI *u);
 
 /* Periodic live refresh for the hardware/diagnosis pages. */
 void       acc_hubs_refresh (void);

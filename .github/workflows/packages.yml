@@ -31,7 +31,10 @@ jobs:
     steps:
       - run: dnf install -y git tar
       - uses: actions/checkout@v4
+      # builds both packages: the app and the host agent
       - run: packaging/build-rpm.sh
+      - name: The agent's self test
+        run: ./agent/asuscraft-agent --check
       - uses: actions/upload-artifact@v4
         with:
           name: rpm-${{ matrix.image == 'fedora:latest' && 'fedora' || 'el10' }}
@@ -73,9 +76,12 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME#v}"
           spec=$(sed -n 's/^Version:[[:space:]]*//p' packaging/rpm/asus-control-center.spec)
+          agent=$(sed -n 's/^Version:[[:space:]]*//p' packaging/rpm/asuscraft-agent.spec)
           deb=$(sed -n '1s/.*(\([^)-]*\).*/\1/p' debian/changelog)
-          echo "tag=$tag spec=$spec debian=$deb"
-          [ "$tag" = "$spec" ] && [ "$tag" = "$deb" ]
+          makefile=$(sed -n 's/^VERSION[[:space:]]*?=[[:space:]]*//p' Makefile)
+          echo "tag=$tag spec=$spec agent=$agent debian=$deb makefile=$makefile"
+          [ "$tag" = "$spec" ] && [ "$tag" = "$deb" ] && [ "$tag" = "$agent" ] \
+            && [ "$tag" = "$makefile" ]
       - uses: actions/download-artifact@v4
         with:
           path: dist

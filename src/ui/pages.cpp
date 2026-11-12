@@ -19,6 +19,8 @@
 #include "../control/softdim.h"
 #include "../control/nightlight.h"
 #include "../control/touchpadctl.h"
+#include "../control/hostcmd.h"
+#include "../control/agent.h"
 #include "../probe/probe.h"
 #include "../probe/desktop.h"
 #include "../probe/devs.h"
@@ -87,6 +89,7 @@ static GtkWidget *f_sys_os, *f_sys_cpu, *f_sys_ram, *f_sys_ssd,
 static GtkWidget *f_conn_wifi, *f_conn_wifi_sub, *f_conn_bt;
 /* settings page */
 static GtkWidget *f_helper;
+static GtkWidget *f_agent;
 /* support page */
 /* ------------------------------------------------ helpers ------------
  * Thin local aliases over the reusable MyASUS UI kit (ui/mcui.h) — the
@@ -143,11 +146,18 @@ wifi_ssid (const gchar *iface)
 {
   if (!iface)
     return NULL;
-  gchar *out = NULL;
-  gchar *argv[] = { (gchar *) "iw", (gchar *) "dev", (gchar *) iface,
-                    (gchar *) "link", NULL };
-  if (g_spawn_sync (NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
-                    &out, NULL, NULL, NULL) && out)
+  /* the SSID comes from the host (iw is not in the Flatpak runtime) */
+  gchar *out = NULL, *err = NULL;
+  gint code = -1;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
+  if (!acc_host_run (ACC_CMD_WIFI_SSID, iface, &out, &code, &how, &err))
+    {
+      g_free (out);
+      g_free (err);
+      return NULL;
+    }
+  g_free (err);
+  if (out)
     {
       gchar *s = strstr (out, "SSID: ");
       if (s)
@@ -263,7 +273,7 @@ w_ring_val (AccRing *r, gdouble v)
     acc_ring_set_value (r, v);
 }
 
-/* touchpad on/off — DE-aware: GNOME GSettings or xinput */
+/* touchpad on/off — through the desktop's own setting */
 static void
 touchpad_cb (GtkSwitch *sw, GParamSpec *ps, gpointer u)
 {
@@ -279,6 +289,17 @@ eyecare_cb (GtkSwitch *sw, GParamSpec *ps, gpointer u)
   (void) ps;
   (void) u;
   acc_nightlight_set (gtk_switch_get_active (sw));
+}
+
+/* the night light's colour temperature, in Kelvin */
+static void
+nl_temp_cb (GtkRange *rng, gpointer label)
+{
+  gint kelvin = (gint) gtk_range_get_value (rng);
+  if (!acc_nightlight_write_temperature ((guint) kelvin))
+    return;
+  if (label)
+    gtk_label_set_text (GTK_LABEL (label), g_strdup_printf ("%d K", kelvin));
 }
 
 /* E-Reading: render the whole app window in grayscale (MyASUS Splendid
@@ -908,11 +929,17 @@ acc_page_disp (AccUI *u)
     if (sd != ACC_SD_ON)
       {
         gboolean can = sd == ACC_SD_DISABLED || acc_softdim_bundled ();
+        /* installing the extension writes into the user's own extension
+         * folder: only the host can do that */
+        if (can && acc_agent_sandboxed () && !acc_host_agent_ready ())
+          can = FALSE;
         GtkWidget *need = w_lbl (acc_tr (!can ? ACC_T_SOFTDIM_NEED
                                          : sd == ACC_SD_MISSING
                                          ? ACC_T_SD_HINT_MISSING
                                          : ACC_T_SD_HINT_OFF),
                                  "foot", 0);
+        if (!can && acc_agent_sandboxed () && !acc_host_agent_ready ())
+          need = w_lbl (acc_tr (ACC_T_AGENT_NEEDED), "foot", 0);
         gtk_label_set_wrap (GTK_LABEL (need), TRUE);
         gtk_label_set_width_chars (GTK_LABEL (need), 30);
         gtk_box_append (GTK_BOX (ctl), need);
@@ -948,6 +975,28 @@ acc_page_disp (AccUI *u)
     gtk_box_append (GTK_BOX (sr), fill);
     gtk_box_append (GTK_BOX (sr), sw);
     gtk_box_append (GTK_BOX (ctl), sr);
+
+    /* the colour temperature, where the desktop has one */
+    AccNightLight nl = acc_nightlight_read ();
+    if (nl.available && nl.has_temperature)
+      {
+        GtkWidget *tr = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+        GtkWidget *tl = w_lbl (acc_tr (ACC_T_NL_TEMP), "dim", 0);
+        gtk_label_set_width_chars (GTK_LABEL (tl), 16);
+        gtk_box_append (GTK_BOX (tr), tl);
+        GtkWidget *scale = gtk_scale_new_with_range (GTK_ORIENTATION_HORIZONTAL,
+                                                     1700, 4700, 50);
+        gtk_scale_set_draw_value (GTK_SCALE (scale), FALSE);
+        gtk_widget_set_hexpand (scale, TRUE);
+        GtkWidget *tv = w_lbl ("—", "val", 1);
+        gtk_box_append (GTK_BOX (tr), scale);
+        gtk_box_append (GTK_BOX (tr), tv);
+        gtk_range_set_value (GTK_RANGE (scale), nl.temperature);
+        gtk_label_set_text (GTK_LABEL (tv),
+                            g_strdup_printf ("%u K", nl.temperature));
+        g_signal_connect (scale, "value-changed", G_CALLBACK (nl_temp_cb), tv);
+        gtk_box_append (GTK_BOX (ctl), tr);
+      }
     gtk_box_append (GTK_BOX (li), row);
   }
 
@@ -1371,7 +1420,7 @@ acc_page_perf (AccUI *u)
   gtk_box_append (GTK_BOX (kbox), kctl);
   gtk_box_append (GTK_BOX (li), kbox);
 
-  /* touchpad block — Input Device group, DE-aware (GNOME / xinput) */
+  /* touchpad block — Input Device group, through the desktop setting */
   {
     GtkWidget *ctl;
     GtkWidget *row = w_feat ("input-touchpad-symbolic",
@@ -1387,6 +1436,16 @@ acc_page_perf (AccUI *u)
     gtk_box_append (GTK_BOX (sr), fill);
     gtk_box_append (GTK_BOX (sr), sw);
     gtk_box_append (GTK_BOX (ctl), sr);
+    /* the desktop may not offer a switch at all: say so instead of
+     * pretending the hardware is under our control */
+    if (!acc_touchpad_available ())
+      {
+        gtk_widget_set_sensitive (sw, FALSE);
+        GtkWidget *why = w_lbl (acc_tr (ACC_T_TOUCHPAD_UNSUPPORTED), "foot", 0);
+        gtk_label_set_wrap (GTK_LABEL (why), TRUE);
+        gtk_label_set_width_chars (GTK_LABEL (why), 30);
+        gtk_box_append (GTK_BOX (ctl), why);
+      }
     gtk_box_append (GTK_BOX (li), row);
   }
 
@@ -1495,6 +1554,17 @@ theme_sw_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
     acc_ui_theme_toggle ();   /* rebuilds the UI in the new skin */
 }
 
+/* ask the bus again whether the host agent is there */
+static void
+agent_check_cb (GtkButton *b, gpointer user)
+{
+  (void) b;
+  (void) user;
+  acc_agent_reset ();
+  acc_agent_state ();
+  acc_page_refresh (NULL);
+}
+
 static void
 autostart_cb (GtkSwitch *sw, GParamSpec *ps, gpointer user)
 {
@@ -1561,6 +1631,35 @@ acc_page_settings (AccUI *u)
                     w_lbl (acc_tr (ACC_T_CAP_HELPER), "dim", 0));
     gtk_box_append (GTK_BOX (helper_row), f_helper);
     gtk_box_append (GTK_BOX (ctl), helper_row);
+
+    /* the host agent: what it is for, and whether it is there */
+    f_agent = w_lbl ("—", "val", 0);
+    gtk_widget_set_hexpand (f_agent, TRUE);
+    GtkWidget *agent_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (agent_row),
+                    w_lbl (acc_tr (ACC_T_AGENT), "dim", 0));
+    gtk_box_append (GTK_BOX (agent_row), f_agent);
+    GtkWidget *agent_chk = gtk_button_new_with_label
+      (acc_tr (ACC_T_AGENT_CHECK));
+    gtk_widget_add_css_class (agent_chk, "actionbtn");
+    gtk_widget_set_valign (agent_chk, GTK_ALIGN_CENTER);
+    g_signal_connect (agent_chk, "clicked", G_CALLBACK (agent_check_cb), NULL);
+    gtk_box_append (GTK_BOX (agent_row), agent_chk);
+    gtk_box_append (GTK_BOX (ctl), agent_row);
+
+    GtkWidget *agent_hint = w_lbl (acc_tr (ACC_T_AGENT_HINT), "foot", 0);
+    gtk_label_set_wrap (GTK_LABEL (agent_hint), TRUE);
+    gtk_label_set_width_chars (GTK_LABEL (agent_hint), 34);
+    gtk_box_append (GTK_BOX (ctl), agent_hint);
+
+    /* a Flatpak build says so plainly */
+    if (acc_agent_sandboxed ())
+      {
+        GtkWidget *sb = w_lbl (acc_tr (ACC_T_SANDBOX), "foot", 0);
+        gtk_label_set_wrap (GTK_LABEL (sb), TRUE);
+        gtk_label_set_width_chars (GTK_LABEL (sb), 34);
+        gtk_box_append (GTK_BOX (ctl), sb);
+      }
 
     /* static build version — accurate, not read from the hardware */
     GtkWidget *ver_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
@@ -2020,6 +2119,12 @@ acc_page_refresh (AccUI *u)
                                           acc_tr (ACC_T_GPU_STEP3),
                                           acc_tr (ACC_T_GPU_REVERT));
                 }
+              else if (!gs.shutdown_known)
+                {
+                  /* the state could not be read: say so, do not guess */
+                  kind = "warn";
+                  body = g_strdup (acc_tr (ACC_T_GPU_HOOK_UNKNOWN));
+                }
               else
                 {
                   kind = "warn";
@@ -2187,10 +2292,42 @@ acc_page_refresh (AccUI *u)
 
   /* settings page */
   if (f_helper)
-    gtk_label_set_text (GTK_LABEL (f_helper),
-                        !acc_ctl_available () ? acc_tr (ACC_T_HELPER_NO)
-                        : acc_ctl_helper_stale () ? acc_tr (ACC_T_HELPER_STALE)
-                                                  : acc_tr (ACC_T_HELPER_OK));
+    {
+      /* in a sandbox the helper lives on the host: the agent stands in
+       * for it, so the row says what is actually there */
+      if (acc_agent_sandboxed ())
+        {
+          AccAgentState st = acc_agent_state ();
+          gtk_label_set_text (GTK_LABEL (f_helper),
+                              st == ACC_AGENT_CONNECTED ? acc_tr (ACC_T_HELPER_OK)
+                              : st == ACC_AGENT_READY ? acc_tr (ACC_T_AGENT_READY)
+                                                     : acc_tr (ACC_T_AGENT_NO));
+        }
+      else
+        gtk_label_set_text (GTK_LABEL (f_helper),
+                            !acc_ctl_available () ? acc_tr (ACC_T_HELPER_NO)
+                            : acc_ctl_helper_stale () ? acc_tr (ACC_T_HELPER_STALE)
+                                                      : acc_tr (ACC_T_HELPER_OK));
+    }
+
+  if (f_agent)
+    {
+      AccAgentState st = acc_agent_state ();
+      gchar *text = NULL;
+      if (st == ACC_AGENT_CONNECTED)
+        {
+          const gchar *v = acc_agent_version ();
+          text = v && *v ? g_strdup_printf ("%s (%s)",
+                                            acc_tr (ACC_T_AGENT_OK), v)
+                         : g_strdup (acc_tr (ACC_T_AGENT_OK));
+        }
+      else if (st == ACC_AGENT_READY)
+        text = g_strdup (acc_tr (ACC_T_AGENT_READY));
+      else
+        text = g_strdup (acc_tr (ACC_T_AGENT_NO));
+      gtk_label_set_text (GTK_LABEL (f_agent), text);
+      g_free (text);
+    }
 
   s_sync = FALSE;
 }
@@ -2227,4 +2364,5 @@ acc_page_teardown (void)
   f_sys_os = f_sys_cpu = f_sys_ram = f_sys_ssd = f_sys_bios = f_sys_kernel = NULL;
   f_conn_wifi = f_conn_wifi_sub = f_conn_bt = NULL;
   f_helper = NULL;
+  f_agent = NULL;
 }

@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include <adwaita.h>
+#include <locale.h>
 #include <string.h>
 #include <sys/utsname.h>
 
@@ -18,9 +19,9 @@
 #include "control/muxreq.h"
 #include "control/softdim.h"
 #include "control/nightlight.h"
-#include "control/softdimmer/brightness_engine.h"
-#include "control/softdimmer/monitor_manager.h"
-#include "control/softdimmer/softdimmer_service.h"
+#include "control/touchpadctl.h"
+#include "control/commands.h"
+#include "control/hostcmd.h"
 #include "probe/probe.h"
 #include "probe/desktop.h"
 #include "probe/devs.h"
@@ -34,13 +35,6 @@
 #define APP_ID "io.github.asuscontrolcenter.AsusControlCenter"
 
 static guint refresh_src = 0;
-
-/* Soft Dimmer engine + D-Bus service (owned by the application, created
- * at startup so the GNOME Shell adapter can connect even before the user
- * opens the Soft Dimmer page). */
-AccSdBrightnessEngine *g_sd_engine = NULL;
-AccSdMonitorManager   *g_sd_monitors = NULL;
-AccSdSoftDimmerService *g_sd_service = NULL;
 
 static gboolean
 refresh_tick (gpointer user)
@@ -312,7 +306,8 @@ self_test (void)
                   : gs.current == 0 ? "0 (ultimate/dGPU)" : "1 (hybrid)");
         r_field ("MUX queued", gs.queued < 0 ? "nothing"
                   : gs.queued == 0 ? "0 (ultimate/dGPU)" : "1 (hybrid)");
-        r_field ("asus-shutdown", gs.shutdown_ready ? "ready" : "disabled");
+        r_field ("asus-shutdown", !gs.shutdown_known ? NULL
+                  : gs.shutdown_ready ? "ready" : "disabled");
       }
     else
       {
@@ -417,11 +412,15 @@ self_test (void)
            nl ? "backend available" : "no supported backend on this DE");
   }
   {
-    gboolean ok = g_file_test ("/usr/libexec/asus-control-center/acc-helper",
-                               G_FILE_TEST_IS_EXECUTABLE);
-    r_cap (ok, "Polkit helper (writes)",
-           ok ? "/usr/libexec/asus-control-center/acc-helper installed"
-              : "run ./install.sh with sudo");
+    /* the helper lives on the host: a sandbox reaches it through the
+     * agent, and says so instead of claiming it is missing */
+    gboolean here = g_file_test ("/usr/libexec/asus-control-center/acc-helper",
+                                  G_FILE_TEST_IS_EXECUTABLE);
+    gboolean via_agent = !here && acc_host_agent_ready ();
+    r_cap (here || via_agent, "Polkit helper (writes)",
+           here ? "/usr/libexec/asus-control-center/acc-helper installed"
+                : via_agent ? "on the host, through the host agent"
+                            : "run ./install.sh with sudo");
   }
 
   r_cap (acc_user_selftest (), "Sign-in password hashing",
@@ -443,32 +442,6 @@ on_activate (GtkApplication *app, gpointer user)
 
   /* user-level GSettings bridge for the OLED flicker-free dim slider */
   acc_brightness_init (NULL, NULL);
-
-  /* ── Soft Dimmer engine + D-Bus service ── */
-  g_sd_monitors = acc_sd_monitor_manager_new ();
-  g_sd_engine = acc_sd_brightness_engine_new (g_sd_monitors);
-  g_sd_service = acc_sd_service_new (g_sd_engine);
-
-  /* Forward engine state changes to D-Bus so the GNOME Shell adapter
-   * (Quick Settings, overlay) stays in sync with ASUSCraft. */
-  acc_sd_engine_on_brightness_changed (g_sd_engine,
-      [](gint index, gdouble brightness, gpointer user_data) {
-        (void) user_data;
-        if (g_sd_service)
-          acc_sd_service_notify_brightness (g_sd_service, index, brightness);
-      }, NULL);
-  acc_sd_engine_on_enabled_changed (g_sd_engine,
-      [](AccSdBrightnessEngine *engine, gboolean enabled, gpointer user_data) {
-        (void) engine; (void) user_data;
-        if (g_sd_service)
-          acc_sd_service_notify_enabled (g_sd_service, enabled);
-      }, NULL);
-  acc_sd_engine_on_status_changed (g_sd_engine,
-      [](AccSdBrightnessEngine *engine, AccSdStatus status, gpointer user_data) {
-        (void) engine; (void) status; (void) user_data;
-        if (g_sd_service)
-          acc_sd_service_notify_status (g_sd_service);
-      }, NULL);
 
   /* the local account decides between "create account", "sign in" and
    * straight-to-dashboard when the previous session is still signed in */
@@ -500,23 +473,6 @@ on_shutdown (GtkApplication *app, gpointer user)
       refresh_src = 0;
     }
   acc_brightness_shutdown ();
-
-  /* ── Soft Dimmer cleanup ── */
-  if (g_sd_service)
-    {
-      acc_sd_service_free (g_sd_service);
-      g_sd_service = NULL;
-    }
-  if (g_sd_engine)
-    {
-      acc_sd_brightness_engine_free (g_sd_engine);
-      g_sd_engine = NULL;
-    }
-  if (g_sd_monitors)
-    {
-      acc_sd_monitor_manager_free (g_sd_monitors);
-      g_sd_monitors = NULL;
-    }
 }
 
 /* `--check`: assertion tests for the pure logic behind hardware decisions.
@@ -590,6 +546,49 @@ unit_checks (void)
   expect (!acc_gfx_integrated_supported (&st),
           "an unverified dgpu_disable attribute is not used");
 
+  g_print ("the host command table\n");
+  expect (acc_command_from_id ("service-active") == ACC_CMD_SERVICE_ACTIVE,
+          "a command id maps back to its command");
+  expect (acc_command_from_id ("no-such-command") == -1,
+          "an unknown command id is refused");
+  expect (acc_command_from_id (NULL) == -1, "a NULL command id is refused");
+  {
+    gboolean distinct = TRUE;
+    for (gint i = 0; i < ACC_CMD_COUNT && distinct; i++)
+      for (gint j = i + 1; j < ACC_CMD_COUNT; j++)
+        if (g_strcmp0 (acc_command_id ((AccCommand) i),
+                       acc_command_id ((AccCommand) j)) == 0)
+          distinct = FALSE;
+    expect (distinct, "every command has its own id");
+  }
+  expect (acc_command_arg_ok (ACC_CMD_SERVICE_ACTIVE, "asusd"),
+          "asusd is an allowed service");
+  expect (!acc_command_arg_ok (ACC_CMD_SERVICE_ACTIVE, "sshd"),
+          "another service is refused");
+  expect (!acc_command_arg_ok (ACC_CMD_WIFI_SSID, "-rfkill"),
+          "an argument that looks like a flag is refused");
+  expect (!acc_command_arg_ok (ACC_CMD_SMART_HEALTH, "/dev/sdb"),
+          "an unknown block device is refused");
+  expect (!acc_command_arg_ok (ACC_CMD_GNOME_EXT_ENABLE, "not-a-uuid"),
+          "a string that is not an extension uuid is refused");
+
+  g_print ("the helper whitelist\n");
+  expect (acc_command_helper_action_ok ("set-perf"),
+          "set-perf is one of the helper's verbs");
+  expect (!acc_command_helper_action_ok ("set-anything"),
+          "an unknown verb is refused");
+  expect (acc_command_helper_value_ok ("set-charge", "80"),
+          "80 is an allowed charge limit");
+  expect (!acc_command_helper_value_ok ("set-charge", "55"),
+          "55 is not an allowed charge limit");
+  expect (!acc_command_helper_value_ok ("set-kbd", "9"),
+          "9 is not an allowed keyboard level");
+
+  g_print ("the touchpad backend\n");
+  expect (acc_touchpad_available ()
+          || acc_touchpad_backend ()[0] == '\0',
+          "the touchpad reports a backend or reports none");
+
   g_print ("\n%d failure(s)\n", s_fail);
   return s_fail;
 }
@@ -597,6 +596,11 @@ unit_checks (void)
 int
 main (int argc, char **argv)
 {
+  /* The environment's locale decides how the console output is encoded.
+   * GTK does this when the interface starts; the read-only reports have
+   * to do it themselves, or their dashes come out as question marks. */
+  setlocale (LC_ALL, "");
+
   if (argc > 1 && (strcmp (argv[1], "--version") == 0
                    || strcmp (argv[1], "-v") == 0))
     {

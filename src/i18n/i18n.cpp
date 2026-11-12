@@ -5,16 +5,16 @@
 
 static AccLang g_lang = ACC_LANG_AR; /* Arabic first run, mockup parity */
 
-static const gchar *EN[ACC_T_COUNT] = {
+static const gchar *const EN[] = {
   "Welcome, %s", "Everything is under control",
   "Battery", "Current charge", "Design capacity", "Charge cycles",
   "Recommended charge limit", "Battery details",
   "GPU", "GPU usage", "GPU temperature", "Manage GPU mode",
   "Display (OLED)", "Brightness", "Flicker-free software dimming", "Eye-care mode",
   "Active", "Display settings",
-  "System info", "Operating system", "RAM", "Internal storage", "General temperature",
+  "System", "Operating system", "RAM", "Internal storage", "General temperature",
   "More details",
-  "Fans and cooling", "CPU fan", "GPU fan", "Temperature trend",
+  "Cooling", "CPU fan", "GPU fan", "Temperature trend",
   "Quick apps", "Launch now!", "All apps",
   "Home", "Battery Health Charging", "GPU", "Display (OLED)",
   "Power & Performance", "System info", "Apps", "Settings",
@@ -70,6 +70,7 @@ static const gchar *EN[ACC_T_COUNT] = {
   "holding the GPU open. Log out and retry, or use a text console (TTY).",
   "Authorization dismissed — nothing was changed.",
   "Device settings", "Preferences", "Hardware", "Software",
+  "Quick actions",
   "Customer support",
   "Warranty, drivers and official ASUS service links.",
   "Download drivers",
@@ -177,10 +178,8 @@ static const gchar *EN[ACC_T_COUNT] = {
   "OLED dimming installed. Log out and back in, then use the slider.",
   "OLED dimming enabled. If the slider does nothing yet, log out and back in.",
   "Could not set up OLED dimming. See the terminal for details.",
-  /* System Manager */
-  "System Manager", "Read-only health, storage, startup, process and update overview.",
   /* PC Manager */
-  "PC Manager", "Read-only PC overview, storage and network status.",
+  "PC Management",
   "Security Center", "Firewall", "SELinux", "Listening Ports",
   "Security Tools", "Security Updates", "Network Latency",
   "Overall PC Status", "Storage Manager", "Network Check", "Quick Navigation",
@@ -188,6 +187,9 @@ static const gchar *EN[ACC_T_COUNT] = {
   "Storage Check", "Hardware Health Check", "Software Health Check",
   "Cache & Temporary Files", "Browser Privacy & Website Trackers",
   "Security Scans (optional)",
+  "PC maintenance, optimization, and quick tools.",
+  /* System Manager */
+  "System Manager", "Read-only health, storage, startup, process and update overview.",
   "Health Check", "Storage Manager", "Startup Manager", "Process Manager",
   "System Cleanup", "Updates Center", "Loading…", "Unavailable",
   "No failed services detected", "User cache size", "User", "System",
@@ -217,9 +219,9 @@ static const gchar *EN[ACC_T_COUNT] = {
   "RAM", "USB Connections", "Memory Usage",
   "Dead Pixel Check", "Press any key to see it light up. Press Esc or close the window when done.",
   "Launch the screen test to check for dead pixels.",
-  "Screen test running — close the window when done.",
   "No dead pixels noticed", "I noticed an issue",
   "Next",
+  "Screen test running — close the window when done.",
   "Keyboard Test", "Press keys to light them up. Close the window when done.",
   "Launch the keyboard test to check each key.",
   "Keyboard test running — close the window when done.",
@@ -228,31 +230,33 @@ static const gchar *EN[ACC_T_COUNT] = {
   "No non-hub USB devices found",
   "System Testing",
   "Hardware and software diagnostic tests.",
-  /* Soft Dimmer */
-  "Presets", "Quick brightness levels for common use.",
-  "Monitors", "Per-monitor dimming levels.",
-  "Advanced", "Transitions, startup and behavior.",
-  "Diagnostics", "Engine, extension and D-Bus status.",
-  "Reset",
-  "Smooth transitions", "Fade brightness changes instead of jumping.",
-  "Transition duration", "Milliseconds per brightness change.",
-  "Restore previous brightness", "Remember brightness across sessions.",
-  "Start with GNOME session", "Launch the dimmer engine at login.",
-  "Hide on fullscreen", "Remove overlays for fullscreen apps.",
-  "Synchronize all monitors",
-  "Engine", "GNOME extension", "D-Bus service", "Monitor detection", "Last error",
+  /* the host agent, the sandbox and the desktop limits */
+  "Host agent",
+  "Connected",
+  "Not installed",
+  "Not answering",
+  "Check again",
+  "The host agent gives this build access to the laptop's hardware and to "
+  "your desktop session. The app works without it, but some controls stay "
+  "unavailable.",
+  "Running inside a Flatpak sandbox",
+  "This desktop does not expose a touchpad switch that ASUSCraft can change.",
+  "Colour temperature",
+  "This control needs the host agent.",
+  "The state of the shutdown hook cannot be read from here. Check it with: "
+  "systemctl is-enabled asus-shutdown.service",
 };
 
-static const gchar *AR[ACC_T_COUNT] = {
+static const gchar *const AR[] = {
   "أهلاً، %s", "كل شيء تحت السيطرة",
   "البطارية", "السعة الحالية", "السعة التصميمية", "عدد الدورات",
   "حد الشحن الموصى به", "تفاصيل البطارية",
   "GPU", "استخدام GPU", "درجة الحرارة", "إدارة وضع GPU",
   "الشاشة (OLED)", "السطوع", "خفض برمجي بدون وميض", "وضع حماية العين",
   "نشط", "إعدادات الشاشة",
-  "معلومات النظام", "نظام التشغيل", "الذاكرة (RAM)", "التخزين الداخلي", "الحرارة العامة",
+  "النظام", "نظام التشغيل", "الذاكرة (RAM)", "التخزين الداخلي", "الحرارة العامة",
   "تفاصيل أكثر",
-  "المراوح والحرارة", "مروحة المعالج", "مروحة البطاقة الرسومية", "تطور الحرارة",
+  "التبريد", "مروحة المعالج", "مروحة البطاقة الرسومية", "تطور الحرارة",
   "التطبيقات السريعة", "شغّلها الآن!", "جميع التطبيقات",
   "الصفحة الرئيسية", "صحة البطارية", "GPU", "الشاشة (OLED)",
   "الطاقة والأداء", "معلومات النظام", "التطبيقات", "الإعدادات",
@@ -308,6 +312,7 @@ static const gchar *AR[ACC_T_COUNT] = {
   "استخدم طرفية نصية (TTY).",
   "أُلغي التفويض — لم يتغير شيء.",
   "إعدادات الجهاز", "التفضيلات", "العتاد", "البرمجيات",
+  "إجراءات سريعة",
   "دعم العملاء",
   "الضمان والتعريفات وروابط خدمة ASUS الرسمية.",
   "تنزيل التعريفات",
@@ -415,9 +420,8 @@ static const gchar *AR[ACC_T_COUNT] = {
   "تم تثبيت تعتيم OLED. سجّل الخروج ثم الدخول، ثم استخدم شريط التمرير.",
   "تم تفعيل تعتيم OLED. إذا لم يعمل الشريط بعد، سجّل الخروج ثم الدخول.",
   "تعذّر إعداد تعتيم OLED. راجع الطرفية للتفاصيل.",
-  /* System Manager */
-  "مدير النظام", "نظرة عامة للقراءة فقط على الصحة والتخزين والتشغيل والعمليات والتحديثات.",
-  "مدير الحاسوب", "نظرة عامة للقراءة فقط على الحاسوب والتخزين والشبكة.",
+  /* PC Manager */
+  "إدارة الحاسوب",
   "مركز الأمان", "جدار الحماية", "SELinux", "المنافذ المستمعة",
   "أدوات الأمان", "تحديثات الأمان", "كمون الشبكة",
   "الحالة العامة للحاسوب", "مدير التخزين", "فحص الشبكة", "التنقل السريع",
@@ -425,6 +429,9 @@ static const gchar *AR[ACC_T_COUNT] = {
   "فحص التخزين", "فحص صحة العتاد", "فحص صحة البرمجيات",
   "الذاكرة المؤقتة والملفات المؤقتة", "خصوصية المتصفح ومتعقبات المواقع",
   "فحوصات الأمان (اختيارية)",
+  "صيانة الحاسوب والتحسين والأدوات السريعة.",
+  /* System Manager */
+  "مدير النظام", "نظرة عامة للقراءة فقط على الصحة والتخزين والتشغيل والعمليات والتحديثات.",
   "فحص الصحة", "مدير التخزين", "مدير التشغيل", "مدير العمليات",
   "تنظيف النظام", "مركز التحديثات", "جارٍ التحميل…", "غير متاح",
   "لا توجد خدمات فاشلة", "حجم ذاكرة التخزين المؤقت", "مستخدم", "نظام",
@@ -454,9 +461,9 @@ static const gchar *AR[ACC_T_COUNT] = {
   "الذاكرة RAM", "اتصالات USB", "استخدام الذاكرة",
   "فحص البكسل الميت", "اضغط أي مفتاح لتراه يضيء. اضغط Esc أو أغلق النافذة عند الانتهاء.",
   "شغّل اختبار الشاشة للكشف عن البكسل الميت.",
-  "اختبار الشاشة قيد التشغيل — أغلق النافذة عند الانتهاء.",
   "لم ألاحظ بكسلات ميتة", "لاحظت مشكلة",
   "التالي",
+  "اختبار الشاشة قيد التشغيل — أغلق النافذة عند الانتهاء.",
   "اختبار لوحة المفاتيح", "اضغط المفاتيح لتراها تضيء. أغلق النافذة عند الانتهاء.",
   "شغّل اختبار لوحة المفاتيح لفحص كل مفتاح.",
   "اختبار لوحة المفاتيح قيد التشغيل — أغلق النافذة عند الانتهاء.",
@@ -465,22 +472,26 @@ static const gchar *AR[ACC_T_COUNT] = {
   "لا أجهزة USB غير المراكز الجذرية",
   "اختبار النظام",
   "اختبارات تشخيصية للعتاد والبرمجيات.",
-  /* Soft Dimmer */
-  "المعاينات", "مستويات السطوع السريعة للاستخدام الشائع.",
-  "الشاشات", "مستويات التعتيم لكل شاشة.",
-  "الإعدادات المتقدمة", "الانتقالات والسلوك والتشغيل.",
-  "التشخيص", "حالة المحرك والملحق وخدمة D-Bus.",
-  "إعادة الضبط",
-  "الانتقالات الناعمة", "تدرج تغييرات السطوع بدلاً من القفز.",
-  "مدة الانتقال", "مللي ثانية لكل تغيير في السطوع.",
-  "استعادة السطوع السابق", "تذكر مستوى السطوع عبر الجلسات.",
-  "بدء التشغيل مع جلسة جنوم", "تشغيل محرك التعتيم عند تسجيل الدخول.",
-  "إخفاء عند ملء الشاشة", "إزالة الطبقات التغطية للتطبيقات التي ملء الشاشة.",
-  "مزامنة جميع الشاشات",
-  "المحرك", "ملحق جنوم", "خدمة D-Bus", "كشف الشاشات", "آخر خطأ",
+  /* الوكيل والبيئة المعزولة وحدود سطح المكتب */
+  "وكيل المضيف",
+  "متصل",
+  "غير مثبّت",
+  "لا يستجيب",
+  "تحقّق مجدداً",
+  "يمنح وكيل المضيف هذه النسخة وصولاً إلى عتاد الجهاز وجلسة سطح المكتب. "
+  "يعمل التطبيق بدونه، لكن بعض عناصر التحكم تبقى غير متاحة.",
+  "يعمل داخل بيئة Flatpak معزولة",
+  "لا يوفّر سطح المكتب هذا مفتاحاً للوحة اللمس يمكن لـ ASUSCraft تغييره.",
+  "درجة حرارة اللون",
+  "يحتاج هذا العنصر إلى وكيل المضيف.",
+  "لا يمكن قراءة حالة خطّاف الإيقاف من هنا. تحقق منها بالأمر: "
+  "systemctl is-enabled asus-shutdown.service",
 };
 
-/* count mismatch guard: arrays must both be exactly ACC_T_COUNT long */
+/* count mismatch guard: arrays must both be exactly ACC_T_COUNT long.
+ * The arrays are declared without a size, so G_N_ELEMENTS() counts the
+ * initialisers: a table that is one string short is a compile error
+ * instead of a NULL label at runtime. */
 G_STATIC_ASSERT (G_N_ELEMENTS (EN) == ACC_T_COUNT);
 G_STATIC_ASSERT (G_N_ELEMENTS (AR) == ACC_T_COUNT);
 

@@ -482,7 +482,7 @@ window.background, .accroot { background: #070C11; color: #E8F3F8; }
 headerbar {
   background: rgba(10, 16, 23, 0.96);
   border-bottom: 1px solid #1B2733;
-  min-height: 50px;
+  min-height: 44px;
 }
 headerbar button { color: #E8F3F8; }
 .appbrand { color: #F4FDFF; font-weight: 800; letter-spacing: 0.2px; }
@@ -490,7 +490,7 @@ headerbar button { color: #E8F3F8; }
 
 .acside { background: #0A1017; border-right: 1px solid #17232E; }
 .acnav > row {
-  border-radius: 11px; margin: 3px 10px; min-height: 42px;
+  border-radius: 11px; margin: 2px 8px; min-height: 36px;
 }
 .acnav > row:hover { background: rgba(34, 211, 238, 0.09); }
 .acnav > row:selected {
@@ -500,7 +500,7 @@ headerbar button { color: #E8F3F8; }
   border-radius: 11px;
 }
 .acnav > row:selected image { color: #22D3EE; }
-.navgroup { color: #6F8795; letter-spacing: 0.7px; font-size: 11px; }
+.navgroup { color: #6F8795; letter-spacing: 0.7px; font-size: 10px; }
 .userchip { border-top: 1px solid #17232E; }
 .userchip image { color: #22D3EE; }
 
@@ -511,12 +511,12 @@ headerbar button { color: #E8F3F8; }
   border-top-left-radius: 18px;
 }
 
-.pagehead { padding: 22px 22px 10px 22px; }
+.pagehead { padding: 14px 16px 6px 16px; }
 .eyebrow {
   color: #22D3EE; font-size: 11px; font-weight: 800;
   letter-spacing: 1.2px; text-transform: uppercase;
 }
-.pagetitle { color: #F4FDFF; font-size: 27px; font-weight: 800; }
+.pagetitle { color: #F4FDFF; font-size: 22px; font-weight: 800; }
 .pagesub { color: #8EA6B3; font-size: 13px; }
 .pageicon {
   border-radius: 16px;
@@ -544,15 +544,14 @@ button.hubtab:checked {
   border: 1px solid #1E2C39;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.24);
 }
-.card { padding: 18px 20px; }
-.accentcard { padding: 22px 24px; }
-.cardtitle { font-size: 15px; font-weight: 700; color: #F4FDFF; }
+.card { padding: 14px 16px; }
+.accentcard { padding: 16px 18px; }
+.cardtitle { font-size: 14px; font-weight: 700; color: #F4FDFF; }
 .cardicon { color: #22D3EE; }
 .dim { color: #8EA6B3; }
 .val { color: #EAF7FB; }
 .foot { color: #7F97A5; }
 .overline { color: #6F8795; letter-spacing: 0.8px; font-size: 11px; }
-
 .achero {
   background-image: linear-gradient(118deg, #061018 0%, #0A2633 58%, #0B3A45 100%);
   border: 1px solid #173543;

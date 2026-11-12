@@ -3,23 +3,23 @@
  *
  * OLED dimming below the panel minimum is done by the GNOME Shell extension
  * Soft Brightness Plus (GPL-3.0-or-later), shipped unmodified in
- * data/soft-brightness-plus/. This module puts it in the user's own
- * extension folder and turns it on. User level only: no root, no shell;
- * the only programs run are glib-compile-schemas and gnome-extensions with
- * fixed arguments. brightness.h keeps driving the slider afterwards.
+ * data/soft-brightness-plus/.
+ *
+ * The extension has to be installed into the USER's own extension folder,
+ * which belongs to the desktop session:
+ *
+ *   - a native install does it here;
+ *   - a Flatpak cannot see that folder, so the host agent does it.
+ *
+ * brightness.h keeps driving the slider afterwards: the dimming VALUE is a
+ * GSettings key, and GSettings works across the sandbox boundary.
  */
 #ifndef ACC_SOFTDIM_H
 #define ACC_SOFTDIM_H
 #include <glib.h>
+#include "sbp_local.h"     /* AccSoftDim */
 
 G_BEGIN_DECLS
-
-typedef enum
-{
-  ACC_SD_MISSING = 0,      /* not installed for this user or system-wide */
-  ACC_SD_DISABLED,         /* installed but not in enabled-extensions    */
-  ACC_SD_ON                /* installed and enabled                      */
-} AccSoftDim;
 
 AccSoftDim acc_softdim_status (void);
 

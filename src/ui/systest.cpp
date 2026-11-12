@@ -31,6 +31,7 @@
 #include "mcui.h"
 #include "window.h"
 #include "../i18n/i18n.h"
+#include "../control/hostcmd.h"
 #include "../probe/battery.h"
 #include "../probe/display.h"
 #include "../probe/gpu.h"
@@ -314,23 +315,6 @@ st_set_state (int idx, DiagState state,
       gtk_spinner_stop (GTK_SPINNER (ts_spinner[idx]));
       gtk_widget_set_visible (ts_spinner[idx], FALSE);
     }
-}
-
-/* g_spawn_sync wrapper — argv only, no shell */
-static gboolean
-st_spawn (const gchar *const *argv, gchar **out, gint *exit_code)
-{
-  gint status = 0;
-  gchar *o    = NULL;
-  gboolean ok = g_spawn_sync (NULL, (gchar **) argv, NULL,
-                              (GSpawnFlags)(G_SPAWN_SEARCH_PATH
-                                            | G_SPAWN_STDERR_TO_DEV_NULL),
-                              NULL, NULL, &o, NULL, &status, NULL);
-  if (!ok) { g_free (o); return FALSE; }
-  if (exit_code)
-    *exit_code = WIFEXITED (status) ? WEXITSTATUS (status) : -1;
-  if (out) *out = o; else g_free (o);
-  return TRUE;
 }
 
 static void history_save (void); /* forward declaration */
@@ -961,16 +945,33 @@ mic_worker (gpointer data)
 {
   gint  gen  = GPOINTER_TO_INT (data);
   gchar *out = g_build_filename (g_get_tmp_dir (), "asuscraft_mic.wav", NULL);
-  gchar *cmd = g_strdup_printf (
-      "arecord -d 1 -f cd -q '%s' 2>/dev/null && stat -c '%%s' '%s'", out, out);
-  FILE  *p   = popen (cmd, "r");
+  /* a fixed argv, never a shell string */
+  gchar *rec = g_find_program_in_path ("arecord");
+  gchar *argv[] = { rec, (gchar *) "-d", (gchar *) "1", (gchar *) "-f",
+                    (gchar *) "cd", (gchar *) "-q", out, NULL };
+  gboolean recorded = FALSE;
+  if (rec)
+    {
+      GError *e = NULL;
+      GSubprocess *p = g_subprocess_newv (argv,
+          (GSubprocessFlags) (G_SUBPROCESS_FLAGS_STDOUT_SILENCE
+                               | G_SUBPROCESS_FLAGS_STDERR_SILENCE), &e);
+      if (p)
+        {
+          g_subprocess_wait_check (p, NULL, NULL);
+          g_object_unref (p);
+          recorded = TRUE;
+        }
+      else
+        g_clear_error (&e);
+    }
+  g_free (rec);
   DiagState st = DS_UNSUPPORTED;
   gchar *val = NULL, *det = NULL;
-  if (p)
+  if (recorded)
     {
-      long sz = 0;
-      (void) fscanf (p, "%ld", &sz);
-      pclose (p);
+      GStatBuf sb;
+      long sz = (g_stat (out, &sb) == 0) ? (long) sb.st_size : 0;
       if (sz > 1024)
         {
           st  = DS_PASSED;
@@ -992,7 +993,7 @@ mic_worker (gpointer data)
       val = g_strdup (T ("arecord not found", "arecord غير موجود"));
       det = g_strdup ("Install alsa-utils: dnf install alsa-utils");
     }
-  g_unlink (out); g_free (out); g_free (cmd);
+  g_unlink (out); g_free (out);
   post_later (gen, ST_MIC, st, val, det, NULL);
   return NULL;
 }
@@ -1218,10 +1219,14 @@ static void test_bluetooth (gint gen) {
   GDir *d = g_dir_open ("/sys/class/bluetooth", 0, NULL);
   if (d) { found = (g_dir_read_name (d) != NULL); g_dir_close (d); }
   if (!found) {
-    /* Try bluetoothctl list as fallback */
-    const gchar *argv[] = { "bluetoothctl", "list", NULL };
-    gchar *out = NULL;
-    if (st_spawn (argv, &out, NULL)) { found = out && out[0] != '\0' && out[0] != '\n'; g_free (out); }
+    /* Try bluetoothctl list as fallback (it lives on the host) */
+    gchar *out = NULL, *err = NULL;
+    gint ec = -1;
+    AccHostHow how = ACC_HOST_UNAVAILABLE;
+    if (acc_host_run (ACC_CMD_BLUETOOTH_ADAPTERS, NULL, &out, &ec, &how, &err))
+      { found = out && out[0] != '\0' && out[0] != '\n'; }
+    g_free (out);
+    g_free (err);
   }
   if (found)
     post_later(gen,ST_BT,DS_PASSED,g_strdup(T("Adapter found","المحوّل موجود")),g_strdup(T("Bluetooth adapter detected.","تم الكشف عن محوّل بلوتوث.")),NULL);
@@ -1244,8 +1249,10 @@ static void test_gpu (gint gen) {
 /* ============================================= auto software tests */
 
 static void test_asusd (gint gen) {
-  const gchar *argv[] = { "systemctl", "is-active", "--quiet", "asusd", NULL };
-  gint ec = -1; gboolean ok = st_spawn (argv, NULL, &ec);
+  gchar *out = NULL, *err = NULL;
+  gint ec = -1; AccHostHow how = ACC_HOST_UNAVAILABLE;
+  gboolean ok = acc_host_run (ACC_CMD_SERVICE_ACTIVE, "asusd", &out, &ec, &how, &err);
+  g_free (out); g_free (err);
   gboolean active = ok && ec == 0;
   post_later(gen,ST_ASUSD, active?DS_PASSED:DS_WARNING,
     g_strdup(active?T("Active","نشطة"):T("Inactive","متوقفة")),
@@ -1254,8 +1261,10 @@ static void test_asusd (gint gen) {
 }
 
 static void test_supergfxd (gint gen) {
-  const gchar *argv[] = { "systemctl", "is-active", "--quiet", "supergfxd", NULL };
-  gint ec = -1; gboolean ok = st_spawn (argv, NULL, &ec);
+  gchar *out = NULL, *err = NULL;
+  gint ec = -1; AccHostHow how = ACC_HOST_UNAVAILABLE;
+  gboolean ok = acc_host_run (ACC_CMD_SERVICE_ACTIVE, "supergfxd", &out, &ec, &how, &err);
+  g_free (out); g_free (err);
   gboolean active = ok && ec == 0;
   post_later(gen,ST_SUPERGFXD, active?DS_PASSED:DS_WARNING,
     g_strdup(active?T("Active","نشطة"):T("Not found / inactive","غير موجودة")),
@@ -1264,13 +1273,13 @@ static void test_supergfxd (gint gen) {
 }
 
 static void test_asus_wmi (gint gen) {
-  const gchar *argv[] = { "lsmod", NULL };
-  gchar *out = NULL;
+  gchar *out = NULL, *err = NULL;
+  gint ec = -1; AccHostHow how = ACC_HOST_UNAVAILABLE;
   gboolean loaded = FALSE;
-  if (st_spawn (argv, &out, NULL)) {
+  if (acc_host_run (ACC_CMD_LOADED_MODULES, NULL, &out, &ec, &how, &err)) {
     loaded = out && strstr (out, "asus_wmi") != NULL;
-    g_free (out);
   }
+  g_free (out); g_free (err);
   post_later(gen,ST_ASUS_WMI,loaded?DS_PASSED:DS_WARNING,
     g_strdup(loaded?T("Loaded","محمّلة"):T("Not loaded","غير محمّلة")),
     g_strdup(loaded?T("asus_wmi kernel module is loaded.","وحدة asus_wmi في النواة محمّلة."):T("asus_wmi not found in lsmod output.","asus_wmi غير موجودة في lsmod.")),
@@ -1306,10 +1315,12 @@ static void test_nvidia (gint gen) {
 }
 
 static void test_i915 (gint gen) {
-  const gchar *argv[] = { "lsmod", NULL };
-  gchar *out = NULL;
+  gchar *out = NULL, *err = NULL;
+  gint ec = -1; AccHostHow how = ACC_HOST_UNAVAILABLE;
   gboolean loaded = FALSE;
-  if (st_spawn (argv, &out, NULL)) { loaded = out && strstr(out,"i915")!=NULL; g_free(out); }
+  if (acc_host_run (ACC_CMD_LOADED_MODULES, NULL, &out, &ec, &how, &err))
+    { loaded = out && strstr(out,"i915")!=NULL; }
+  g_free (out); g_free (err);
   post_later(gen,ST_I915,loaded?DS_PASSED:DS_WARNING,
     g_strdup(loaded?T("Loaded","محمّلة"):T("Not loaded","غير محمّلة")),
     g_strdup(loaded?T("Intel i915 module loaded.","وحدة Intel i915 محمّلة."):T("i915 not in lsmod — may not apply to AMD/NVIDIA-only systems.","i915 غير موجودة في lsmod.")),
@@ -1326,9 +1337,10 @@ static void test_firmware (gint gen) {
   }
   g_free (prog);
   /* fwupdmgr get-updates exits 0 when updates available, 2 when nothing */
-  const gchar *argv[] = { "fwupdmgr", "get-updates", "--no-reboot-check", NULL };
-  gchar *out = NULL; gint ec = -1;
-  st_spawn (argv, &out, &ec);
+  gchar *out = NULL, *err = NULL; gint ec = -1;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
+  acc_host_run (ACC_CMD_FIRMWARE_UPDATES, NULL, &out, &ec, &how, &err);
+  g_free (err);
   gboolean has_updates = (ec == 0 && out && strstr(out,"Release") != NULL);
   post_later(gen,ST_FIRMWARE, has_updates?DS_WARNING:DS_PASSED,
     g_strdup(has_updates?T("Updates available","تحديثات متاحة"):T("Up to date","محدّث")),
@@ -1344,12 +1356,13 @@ static void test_updates (gint gen) {
   if (dnf) {
     g_free (dnf);
     /* dnf check-update: exit 0=no updates, 100=updates available, else error */
-    const gchar *argv[] = { "dnf", "check-update", "-q", "--refresh", NULL };
-    gchar *out = NULL; gint ec = -1;
-    st_spawn (argv, &out, &ec);
+    gchar *out = NULL, *errs = NULL; gint ec = -1;
+    AccHostHow how = ACC_HOST_UNAVAILABLE;
+    acc_host_run (ACC_CMD_PACKAGE_UPDATES, NULL, &out, &ec, &how, &errs);
+    g_free (errs);
     gboolean has = (ec == 100);
-    gboolean err = (ec < 0 || (ec != 0 && ec != 100));
-    if (!err)
+    gboolean bad = (ec < 0 || (ec != 0 && ec != 100));
+    if (!bad)
       post_later(gen,ST_UPDATES, has?DS_WARNING:DS_PASSED,
         g_strdup(has?T("Updates pending","تحديثات معلّقة"):T("Up to date","محدّث")),
         has ? g_strdup_printf(T("dnf found pending updates (exit %d).","dnf وجد تحديثات معلّقة (الخروج %d)"),ec) : g_strdup(T("No pending package updates.","لا تحديثات معلّقة.")),
@@ -1364,9 +1377,10 @@ static void test_updates (gint gen) {
   gchar *apt = g_find_program_in_path ("apt-get");
   if (apt) {
     g_free (apt);
-    const gchar *argv2[] = { "apt-get", "-s", "upgrade", NULL };
-    gchar *out = NULL;
-    st_spawn (argv2, &out, NULL);
+    gchar *out = NULL, *err = NULL;
+    gint ec = -1; AccHostHow how = ACC_HOST_UNAVAILABLE;
+    acc_host_run (ACC_CMD_APT_UPDATES, NULL, &out, &ec, &how, &err);
+    g_free (err);
     gboolean has = out && strstr(out,"newly installed")!=NULL && strstr(out,"0 newly installed")==NULL;
     post_later(gen,ST_UPDATES, has?DS_WARNING:DS_PASSED,
       g_strdup(has?T("Updates pending","تحديثات معلّقة"):T("Up to date","محدّث")),

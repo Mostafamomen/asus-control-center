@@ -60,6 +60,7 @@ typedef struct
   gint     queued;             /* asusd queue, -1 when nothing is queued   */
   gboolean allow_hybrid, allow_ultimate;
   gboolean shutdown_ready;     /* asus-shutdown.service enabled or active  */
+  gboolean shutdown_known;     /* FALSE when the state could not be read   */
 } AsusdGpuState;
 
 /* TRUE when the asusd name is currently owned on the system bus. */

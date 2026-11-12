@@ -8,7 +8,6 @@
 #include "theme.h"
 #include "mcui.h"
 #include "sysdiag.h"
-#include "softdimmer_page.h"
 #include "../i18n/i18n.h"
 #include "../control/asusd.h"
 #include "../control/ctl.h"
@@ -27,7 +26,7 @@
 
 /* ---------------------------------------------------------------- state */
 static GtkStack *s_custom_stack = NULL;
-static GtkWidget *s_custom_tabs[5] = { NULL, NULL, NULL, NULL, NULL };
+static GtkWidget *s_custom_tabs[4] = { NULL, NULL, NULL, NULL };
 
 static GtkWidget *h_model, *h_vendor, *h_bios;
 static GtkWidget *h_cpu, *h_load;
@@ -81,7 +80,7 @@ page_head (AccStr title, AccStr sub)
     gtk_box_append (GTK_BOX (col), s);
     gtk_box_append (GTK_BOX (h), col);
 
-    gchar *mascot = acc_asset_path ("asuscraft.png");
+    gchar *mascot = acc_asset_path ("asuscraft-logo.png");
     if (mascot)
     {
         GtkWidget *im = gtk_image_new_from_file (mascot);
@@ -95,7 +94,7 @@ page_head (AccStr title, AccStr sub)
 }
 
 static GtkWidget *
-hw_card (const gchar *icon, AccStr title, GtkBox *parent)
+hw_card (const gchar *icon, AccStr title, GtkBox *content)
 {
     GtkWidget *c = mc_card ();
     GtkWidget *head = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
@@ -106,7 +105,12 @@ hw_card (const gchar *icon, AccStr title, GtkBox *parent)
     gtk_box_append (GTK_BOX (head), im);
     gtk_box_append (GTK_BOX (head), mc_title (acc_tr (title)));
     gtk_box_append (GTK_BOX (c), head);
-    gtk_box_append (parent, c);
+    /* The key/value rows belong *inside* the card.  Appending them to the
+     * card's parent instead re-parents the card before
+     * gtk_flow_box_append() receives it, which trips the GTK assertion
+     * "gtk_widget_get_parent (child) == NULL" and silently drops the card
+     * from the flow box. */
+    gtk_box_append (GTK_BOX (c), GTK_WIDGET (content));
     return c;
 }
 
@@ -172,7 +176,6 @@ acc_page_customization (AccUI *u)
     gtk_stack_add_named (GTK_STACK (stack), acc_page_bat (u), "battery");
     gtk_stack_add_named (GTK_STACK (stack), acc_page_gpu (u), "gpu");
     gtk_stack_add_named (GTK_STACK (stack), acc_page_disp (u), "display");
-    gtk_stack_add_named (GTK_STACK (stack), acc_page_softdimmer (u), "softdimmer");
     gtk_stack_set_visible_child_name (GTK_STACK (stack), "performance");
 
     GtkToggleButton *g = NULL;
@@ -182,7 +185,6 @@ acc_page_customization (AccUI *u)
     s_custom_tabs[1] = hub_tab (bar, g, acc_tr (ACC_T_TAB_BAT), "battery", FALSE);
     s_custom_tabs[2] = hub_tab (bar, g, acc_tr (ACC_T_TAB_GPU), "gpu", FALSE);
     s_custom_tabs[3] = hub_tab (bar, g, acc_tr (ACC_T_TAB_DISP), "display", FALSE);
-    s_custom_tabs[4] = hub_tab (bar, g, acc_tr (ACC_T_SOFTDIM), "softdimmer", FALSE);
     return root;
 }
 
@@ -507,8 +509,7 @@ acc_hubs_select (const gchar *page)
         case 0: name = "performance"; break;
         case 1: name = "battery"; break;
         case 2: name = "gpu"; break;
-        case 3: name = "display"; break;
-        case 4: name = "softdimmer"; break;
+        default: name = "display"; break;
         }
         if (g_strcmp0 (page, name) == 0)
         {

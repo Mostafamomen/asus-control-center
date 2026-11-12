@@ -60,9 +60,9 @@ static GtkApplication *g_app = NULL;
 static GtkCssProvider *g_theme = NULL;
 
 /* collapsible sidebar: closed = icon rail, open = icons + text */
-#define SIDE_OPEN_W   250
-#define SIDE_CLOSED_W  68
-#define SIDE_MARK_PX   28
+#define SIDE_OPEN_W   220
+#define SIDE_CLOSED_W  56
+#define SIDE_MARK_PX   36
 static GtkWidget *g_side = NULL;        /* the sidebar box              */
 static GtkWidget *g_brandmark = NULL;   /* the drawn app mark           */
 static GtkWidget *g_uchip = NULL;       /* bottom user row              */
@@ -310,10 +310,10 @@ mk_nav_row (const gchar *icon, AccStr txt, const gchar *page)
 {
   GtkWidget *row = gtk_list_box_row_new ();
   GtkWidget *h = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
-  gtk_widget_set_margin_top (h, 7);
-  gtk_widget_set_margin_bottom (h, 7);
-  gtk_widget_set_margin_start (h, 12);
-  gtk_widget_set_margin_end (h, 12);
+  gtk_widget_set_margin_top (h, 4);
+  gtk_widget_set_margin_bottom (h, 4);
+  gtk_widget_set_margin_start (h, 10);
+  gtk_widget_set_margin_end (h, 10);
   GtkWidget *img = gtk_image_new_from_icon_name (icon);
   gtk_image_set_pixel_size (GTK_IMAGE (img), 18);
   gtk_widget_set_valign (img, GTK_ALIGN_CENTER);
@@ -346,10 +346,10 @@ mk_nav_group (AccStr txt)
   GtkWidget *lab = gtk_label_new (acc_tr (txt));
   gtk_label_set_xalign (GTK_LABEL (lab), 0.0);
   gtk_widget_add_css_class (lab, "navgroup");
-  gtk_widget_set_margin_top (lab, 10);
-  gtk_widget_set_margin_bottom (lab, 2);
-  gtk_widget_set_margin_start (lab, 14);
-  gtk_widget_set_margin_end (lab, 14);
+  gtk_widget_set_margin_top (lab, 6);
+  gtk_widget_set_margin_bottom (lab, 1);
+  gtk_widget_set_margin_start (lab, 12);
+  gtk_widget_set_margin_end (lab, 12);
   gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), lab);
   if (g_navgroups)
     g_ptr_array_add (g_navgroups, row);
@@ -620,10 +620,10 @@ acc_ui_boot (GtkApplication *app)
     { "computer-symbolic",                ACC_T_NAV_HW,       "hardware"      },  /* 2 */
     { "applications-utilities-symbolic",  ACC_T_NAV_DIAG,     "diagnosis"     },  /* 3 */
     { "computer-fail-symbolic",           ACC_T_NAV_SYSTEST,  "systest"       },  /* 4 */
-    { "view-refresh-symbolic",            ACC_T_NAV_HOME,     "quickactions"  },  /* 5 */
-    { "applications-system-symbolic",     ACC_T_SERVICE,      "sysmgr"        },  /* 6 */
-    { "application-x-executable-symbolic", ACC_T_SERVICE,    "softcenter"    },  /* 7 */
-    { "computer-symbolic",                ACC_T_SERVICE,      "pcmanager"     },  /* 8 */
+    { "view-refresh-symbolic",            ACC_T_QUICK_ACTIONS, "quickactions"  },  /* 5 */
+    { "applications-system-symbolic",     ACC_T_SYSMGR,       "sysmgr"        },  /* 6 */
+    { "application-x-executable-symbolic", ACC_T_PC_SW_MANAGER, "softcenter"   },  /* 7 */
+    { "computer-symbolic",                ACC_T_PC_MANAGER,   "pcmanager"     },  /* 8 PCMgmt */
     { "software-update-available-symbolic", ACC_T_NAV_UPD,    "support"       },  /* 9 */
     { "emblem-system-symbolic",           ACC_T_NAV_SET,      "settings"      },  /* 10 */
   };
@@ -661,7 +661,6 @@ acc_ui_boot (GtkApplication *app)
   gtk_stack_add_named (GTK_STACK (stack), acc_page_pcmanager (ui), "pcmanager");
   gtk_stack_add_named (GTK_STACK (stack), acc_systest_page (ui), "systest");
   gtk_stack_add_named (GTK_STACK (stack), acc_page_settings (ui), "settings");
-  gtk_stack_add_named (GTK_STACK (stack), acc_page_softdimmer (ui), "softdimmer");
 
   /* restore the collapsed/expanded state from the last session */
   sidebar_load_pref ();
@@ -731,14 +730,10 @@ acc_ui_boot (GtkApplication *app)
   adw_application_window_set_content (ADW_APPLICATION_WINDOW (g_root),
                                       mc_gray_new (g_toasts));
 
-  /* Fill the screen on launch so ASUSCraft uses the full display area. */
-  gtk_window_maximize (GTK_WINDOW (g_root));
-
   gtk_window_present (GTK_WINDOW (g_root));
 
   /* every widget exists now: apply the saved sidebar state once */
   sidebar_apply (s_collapsed);
-
   if (g_getenv ("ACC_DEBUG"))
     g_printerr ("sidebar: collapsed=%d width=%d\n",
                 s_collapsed, s_collapsed ? SIDE_CLOSED_W : SIDE_OPEN_W);

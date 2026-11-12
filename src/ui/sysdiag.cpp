@@ -19,6 +19,7 @@
 #include "../control/asusd.h"
 #include "../control/ctl.h"
 #include "../control/gfx.h"
+#include "../control/hostcmd.h"
 #include "../probe/battery.h"
 #include "../probe/hwmon.h"
 #include "../probe/load.h"
@@ -666,12 +667,11 @@ check_storage (void)
     {
       if (!g_file_test (*dp, G_FILE_TEST_EXISTS))
         continue;
-      gchar *argv[] = { (gchar *)"smartctl", (gchar *)"-H", (gchar *)*dp, NULL };
-      gchar *out = NULL;
+      gchar *out = NULL, *err = NULL;
       gint status = 0;
-      if (g_spawn_sync (NULL, argv, NULL,
-                        (GSpawnFlags)(G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL),
-                        NULL, NULL, &out, NULL, &status, NULL) && out)
+      AccHostHow how = ACC_HOST_UNAVAILABLE;
+      if (acc_host_run (ACC_CMD_SMART_HEALTH, *dp, &out, &status, &how, &err)
+          && out)
         {
           smart_tried = TRUE;
           gboolean failing = (status & 8) != 0;
@@ -679,8 +679,9 @@ check_storage (void)
           if (failing)       { smart_ok = FALSE; smart_msg = g_strdup_printf ("SMART FAIL (%s)", *dp); }
           else if (passed)   { smart_ok = TRUE;  smart_msg = g_strdup_printf ("SMART PASSED (%s)", *dp); }
           else               { smart_tried = FALSE; }
-          g_free (out);
         }
+      g_free (out);
+      g_free (err);
     }
 
   if (smart_tried)
@@ -1031,22 +1032,6 @@ hc_post (guint gen, int id, int st, gchar *val, gchar *expl)
   g_idle_add (hc_apply, m);
 }
 
-/* argv only, no shell; `timeout` bounds network-backed tools. */
-static gboolean
-hc_spawn (const gchar *const *argv, gchar **out, gint *exit_code)
-{
-  gint status = 0;
-  gchar *o = NULL;
-  gboolean ok = g_spawn_sync (NULL, (gchar **) argv, NULL,
-                              (GSpawnFlags) (G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL),
-                              NULL, NULL, &o, NULL, &status, NULL);
-  if (!ok) { g_free (o); return FALSE; }
-  if (exit_code)
-    *exit_code = WIFEXITED (status) ? WEXITSTATUS (status) : -1;
-  if (out) *out = o; else g_free (o);
-  return TRUE;
-}
-
 static int
 hc_count_lines (const gchar *s)
 {
@@ -1191,11 +1176,13 @@ hc_worker (gpointer data)
   /* ---- Drivers & Graphics ---- */
   {
     gchar *o = NULL; gint ec = -1;
-    const gchar *argv[] = { "systemctl", "is-active", "asusd", NULL };
-    gboolean ran = hc_spawn (argv, &o, &ec);
+    AccHostHow how = ACC_HOST_UNAVAILABLE;
+    gboolean ran = acc_host_run (ACC_CMD_SERVICE_ACTIVE, "asusd", &o, &ec,
+                                 &how, NULL);
     if (!ran)
       hc_post (gen, HC_ASUSD, HC_NA, g_strdup ("—"),
-               g_strdup (T ("systemctl is not available.", "systemctl غير متاح.")));
+               g_strdup (T ("The service state is not available here: install the ASUSCraft host agent, or run the native package.",
+                            "حالة الخدمة غير متاحة هنا: ثبّت وكيل ASUSCraft للمضيف أو استخدم الحزمة الأصلية.")));
     else
       {
         gchar *state = g_strstrip (g_strdup (o ? o : ""));
@@ -1262,9 +1249,9 @@ hc_worker (gpointer data)
   /* ---- Application health ---- */
   {
     gchar *o = NULL; gint ec = -1;
-    const gchar *argv[] = { "timeout", "30", "dnf", "check-update", "-q", "--cacheonly", NULL };
-    gboolean has_dnf = g_find_program_in_path ("dnf") != NULL;
-    if (!has_dnf || !hc_spawn (argv, &o, &ec) || (ec != 0 && ec != 100))
+    AccHostHow how = ACC_HOST_UNAVAILABLE;
+    if (!acc_host_run (ACC_CMD_PACKAGE_UPDATES, NULL, &o, &ec, &how, NULL)
+        || (ec != 0 && ec != 100))
       hc_post (gen, HC_UPDATES, HC_NA, g_strdup ("—"),
                g_strdup (T ("Package update data is not available (dnf missing or no cached metadata).",
                             "بيانات التحديثات غير متاحة (dnf غير موجود أو لا توجد بيانات مخزّنة).")));
@@ -1281,10 +1268,8 @@ hc_worker (gpointer data)
   }
   {
     gchar *o = NULL; gint ec = -1;
-    const gchar *argv[] = { "timeout", "30", "fwupdmgr", "get-updates", "--no-unreported-check",
-                            "--no-metadata-check", "--json", NULL };
-    gchar *fp = g_find_program_in_path ("fwupdmgr");
-    if (!fp || !hc_spawn (argv, &o, &ec))
+    AccHostHow how = ACC_HOST_UNAVAILABLE;
+    if (!acc_host_run (ACC_CMD_FIRMWARE_UPDATES, NULL, &o, &ec, &how, NULL))
       hc_post (gen, HC_FWUPD, HC_NA, g_strdup ("—"),
                g_strdup (T ("fwupd is not installed.", "fwupd غير مثبّت.")));
     else
@@ -1300,13 +1285,14 @@ hc_worker (gpointer data)
                    g_strdup (n ? T ("Firmware updates are available from the LVFS.", "تتوفر تحديثات للبرمجية الثابتة من LVFS.")
                                : T ("No firmware updates reported.", "لا توجد تحديثات للبرمجية الثابتة.")));
       }
-    g_free (fp); g_free (o);
+    g_free (o);
   }
   {
     gchar *o = NULL; gint ec = -1;
-    const gchar *argv[] = { "timeout", "30", "flatpak", "remote-ls", "--updates", "--columns=application", NULL };
+    AccHostHow how = ACC_HOST_UNAVAILABLE;
     gchar *fp = g_find_program_in_path ("flatpak");
-    if (!fp || !hc_spawn (argv, &o, &ec) || ec != 0)
+    if (!acc_host_run (ACC_CMD_FLATPAK_UPDATES, NULL, &o, &ec, &how, NULL)
+        || ec != 0)
       hc_post (gen, HC_FLATPAK, HC_NA, g_strdup ("—"),
                g_strdup (fp ? T ("Flatpak could not reach its remotes.", "تعذّر على Flatpak الوصول إلى مصادره.")
                             : T ("Flatpak is not installed.", "Flatpak غير مثبّت.")));
@@ -1493,7 +1479,7 @@ acc_sysdiag_page (AccUI *u)
     gtk_label_set_max_width_chars (GTK_LABEL (sub), 80);
     gtk_box_append (GTK_BOX (col), sub);
     gtk_box_append (GTK_BOX (h), col);
-    gchar *mascot = acc_asset_path ("asuscraft.png");
+    gchar *mascot = acc_asset_path ("asuscraft-logo.png");
     if (mascot)
       {
         GtkWidget *im = gtk_image_new_from_file (mascot);

@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "ctl.h"
+#include "commands.h"
+#include "hostcmd.h"
 #include "../probe/probe.h"
 #include <gio/gio.h>
 #include <string.h>
@@ -14,7 +16,12 @@ static int s_last_exit = 0;   /* exit status of the last helper run */
 gboolean
 acc_ctl_available (void)
 {
-  return acc_path_exists (PKEXEC) && acc_path_exists (HELPER);
+  /* the helper itself, here ... */
+  if (acc_path_exists (PKEXEC) && acc_path_exists (HELPER))
+    return TRUE;
+  /* ... or on the host, through the agent (a sandbox cannot see
+   * /usr/libexec) */
+  return acc_host_agent_ready ();
 }
 
 gboolean
@@ -37,55 +44,34 @@ acc_ctl_run (const gchar *action, const gchar *arg, gchar **err)
   if (err)
     *err = NULL;
 
-  /* Validate action against whitelist before touching pkexec */
-  static const gchar *allowed_actions[] = {
-    "set-perf", "set-charge", "set-charge-mode",
-    "set-gpu-mux", "set-kbd", NULL
-  };
-  gboolean action_ok = FALSE;
-  if (action)
-    for (int i = 0; allowed_actions[i]; i++)
-      if (g_strcmp0 (allowed_actions[i], action) == 0)
-        { action_ok = TRUE; break; }
-
-  if (!action_ok || !arg || !*arg)
+  /* Validate action and value against the helper's whitelist before
+   * touching anything privileged. The same list lives in
+   * src/control/commands.cpp, so the app, the agent and the helper all
+   * agree on what is allowed. */
+  if (!acc_command_helper_action_ok (action)
+      || !arg || !*arg
+      || !acc_command_helper_value_ok (action, arg))
     {
       if (err)
         *err = g_strdup ("invalid action or argument");
       return FALSE;
     }
 
-  if (!acc_ctl_available ())
+  /* The helper has to be reachable: either on this machine, or on the host
+   * the agent serves (a Flatpak cannot see /usr/libexec itself). */
+  if (!acc_ctl_available () && !acc_host_agent_ready ())
     {
       if (err)
         *err = g_strdup ("helper not installed");
       return FALSE;
     }
 
-  const gchar *argv[] = { PKEXEC, HELPER, action, arg, NULL };
-  GError *e = NULL;
-  GSubprocessLauncher *l = g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_NONE);
-  GSubprocess *p = g_subprocess_launcher_spawnv (l, argv, &e);
-  g_object_unref (l);
-
-  if (!p)
-    {
-      s_last_exit = -1;
-      if (err)
-        *err = g_strdup (e ? e->message : "spawn failed");
-      g_clear_error (&e);
-      return FALSE;
-    }
-
-  gboolean ok = g_subprocess_wait_check (p, NULL, &e);
+  gint code = -1;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
+  gboolean ok = acc_host_set_hardware (action, arg, &code, &how, err);
   /* remember how it ended: helper exit codes carry the reason
    * (3 = modules in use), pkexec returns 127 when auth is dismissed */
-  s_last_exit = g_subprocess_get_exit_status (p) & 0xff;
-  if (!ok && err)
-    *err = g_strdup (e ? e->message
-                       : "authorization denied or action failed");
-  g_clear_error (&e);
-  g_object_unref (p);
+  s_last_exit = code;
   return ok;
 }
 

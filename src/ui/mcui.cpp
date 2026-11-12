@@ -244,7 +244,7 @@ mc_gray_new (GtkWidget *child)
 GtkWidget *
 mc_brand_mark_new (int px)
 {
-  gchar *path = acc_asset_path ("asuscraft.png");
+  gchar *path = acc_asset_path ("asuscraft-logo.png");
   GtkWidget *mark;
   if (path)
     {

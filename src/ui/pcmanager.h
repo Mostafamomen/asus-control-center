@@ -1,4 +1,4 @@
-/* ui/pcmanager.h - PC Manager page (read-only, Stage 1)
+/* ui/pcmanager.h - PC Manager page
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #ifndef ACC_PCMANAGER_H

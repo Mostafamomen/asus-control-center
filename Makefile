@@ -1,7 +1,7 @@
 # ASUSCraft
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-VERSION  ?= 1.2.4
+VERSION  ?= 1.2.5
 CXX      ?= g++
 CXXFLAGS ?= -O2 -g -Wall -Wextra
 CXXFLAGS += -std=gnu++20
@@ -26,14 +26,12 @@ SRCS = src/main.cpp \
        src/control/brightness.cpp src/control/ctl.cpp src/control/asusd.cpp \
        src/control/gfx.cpp src/control/muxreq.cpp src/control/softdim.cpp src/control/backlight.cpp \
        src/control/nightlight.cpp src/control/touchpadctl.cpp \
+       src/control/commands.cpp src/control/agent.cpp src/control/hostcmd.cpp \
+       src/control/sbp_local.cpp src/control/nlsettings.cpp src/control/portal.cpp \
        src/user/user.cpp \
        src/ui/window.cpp src/ui/home.cpp src/ui/theme.cpp src/ui/ring.cpp \
        src/ui/spark.cpp src/ui/pages.cpp src/ui/hubs.cpp src/ui/sysdiag.cpp \
-       src/ui/sysmgr.cpp src/ui/softcenter.cpp src/ui/pcmanager.cpp src/ui/systest.cpp src/ui/mcui.cpp src/ui/login.cpp src/ui/specs.cpp src/ui/softdimmer_page.cpp \
-       src/control/softdimmer/monitor_manager.cpp \
-       src/control/softdimmer/brightness_engine.cpp \
-       src/control/softdimmer/transition_engine.cpp \
-       src/control/softdimmer/softdimmer_service.cpp
+       src/ui/sysmgr.cpp src/ui/softcenter.cpp src/ui/pcmanager.cpp src/ui/systest.cpp src/ui/mcui.cpp src/ui/login.cpp src/ui/specs.cpp
 
 BIN = asus-control-center
 
@@ -72,25 +70,6 @@ install: $(BIN)
 	cd data && find soft-brightness-plus -type f -exec \
 	  install -Dm0644 {} $(DESTDIR)$(DATADIR)/asus-control-center/{} \;
 
-	# ── Soft Dimmer GNOME Shell extension ──
-	install -d $(DESTDIR)$(SD_EXT_DIR)
-	for f in $(SD_EXT_SRCS); do \
-	  install -Dm0644 $$f $(DESTDIR)$(SD_EXT_DIR)/; \
-	done
-	# Compile GSettings schemas for the extension (if schemas dir exists)
-	if [ -d gnome-extension/soft-dimmer/schemas ]; then \
-	  install -d $(DESTDIR)$(SD_EXT_DIR)/schemas; \
-	  find gnome-extension/soft-dimmer/schemas -name '*.gschema.xml' -exec \
-	    install -Dm0644 {} $(DESTDIR)$(SD_EXT_DIR)/schemas/ \; ; \
-	  if [ -x $(COMPILE_SCHEMAS) ]; then \
-	    $(COMPILE_SCHEMAS) $(DESTDIR)$(SD_EXT_DIR)/schemas || true; \
-	  fi; \
-	fi
-	# Enable the extension for the current user (best-effort, non-fatal)
-	if [ -x $(EXT_BIN) ]; then \
-	  $(EXT_BIN) enable $(SD_EXT_UUID) 2>/dev/null || true; \
-	fi
-
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BIN) \
 	      $(DESTDIR)$(LIBEXECDIR)/asus-control-center/acc-helper \
@@ -102,22 +81,58 @@ uninstall:
 	rm -rf $(DESTDIR)$(DATADIR)/asus-control-center
 	-rmdir $(DESTDIR)$(LIBEXECDIR)/asus-control-center
 
-	# ── Soft Dimmer extension removal ──
-	if [ -x $(EXT_BIN) ]; then \
-	  $(EXT_BIN) disable $(SD_EXT_UUID) 2>/dev/null || true; \
-	fi
-	rm -rf $(DESTDIR)$(SD_EXT_DIR)
+# ---------------------------------------------------------------------------
+# The Flatpak build.
+#
+# The Flatpak has its OWN application id: a Flatpak id may not contain
+# capitals, and the native id (io.github.asuscontrolcenter.AsusControlCenter)
+# is what the polkit action, the desktop file and the dconf path already
+# use. Both are shipped: the native one unchanged, the Flatpak one lower
+# case, side by side.
+#
+# The helper and the polkit policy are NOT installed here: they belong to
+# the host, and the host agent invokes them.
+FLATPAK_PREFIX ?= /app
+FLATPAK_APP_ID = io.github.asuscontrolcenter.asuscraft
 
-# Soft Dimmer (ASUSCraft integrated) GNOME Shell extension
-SD_EXT_UUID   = soft-dimmer-asc@io.github.asuscraft
-SD_EXT_DIR    = $(DATADIR)/gnome-shell/extensions/$(SD_EXT_UUID)
-SD_EXT_SRCS   = gnome-extension/soft-dimmer/extension.js \
-                gnome-extension/soft-dimmer/dimmer.js \
-                gnome-extension/soft-dimmer/indicator.js \
-                gnome-extension/soft-dimmer/dbus_client.js \
-                gnome-extension/soft-dimmer/metadata.json
-EXT_BIN       ?= /usr/bin/gnome-extensions
-COMPILE_SCHEMAS ?= /usr/bin/glib-compile-schemas
+install-flatpak: $(BIN)
+	install -Dm0755 $(BIN) $(DESTDIR)$(FLATPAK_PREFIX)/bin/$(BIN)
+	install -d $(DESTDIR)$(FLATPAK_PREFIX)/share/applications
+	sed -e 's|Exec=@BIN@/$(BIN)|Exec=$(BIN)|' \
+	    -e 's|^Icon=.*|Icon=$(FLATPAK_APP_ID)|' \
+	    data/$(APP_ID).desktop.in \
+	  > $(DESTDIR)$(FLATPAK_PREFIX)/share/applications/$(FLATPAK_APP_ID).desktop
+	install -Dm0644 data/$(APP_ID).svg \
+	  $(DESTDIR)$(FLATPAK_PREFIX)/share/icons/hicolor/scalable/apps/$(FLATPAK_APP_ID).svg
+	for size in 16x16 24x24 32x32 48x48 64x64 128x128 256x256 512x512; do \
+	  install -Dm0644 data/icons/hicolor/$$size/apps/$(APP_ID).png \
+	    $(DESTDIR)$(FLATPAK_PREFIX)/share/icons/hicolor/$$size/apps/$(FLATPAK_APP_ID).png; \
+	done
+	install -Dm0644 data/$(APP_ID).svg \
+	  $(DESTDIR)$(FLATPAK_PREFIX)/share/icons/hicolor/scalable/apps/$(APP_ID).svg
+	install -d $(DESTDIR)$(FLATPAK_PREFIX)/share/metainfo
+	sed -e 's|<id>.*</id>|<id>$(FLATPAK_APP_ID)</id>|' \
+	    -e 's|<launchable type="desktop-id">.*</launchable>|<launchable type="desktop-id">$(FLATPAK_APP_ID).desktop</launchable>|' \
+	    data/$(APP_ID).metainfo.xml \
+	  > $(DESTDIR)$(FLATPAK_PREFIX)/share/metainfo/$(FLATPAK_APP_ID).metainfo.xml
+	install -Dm0644 docs/$(BIN).1 $(DESTDIR)$(FLATPAK_PREFIX)/share/man/man1/$(BIN).1
+	install -d $(DESTDIR)$(FLATPAK_PREFIX)/share/asus-control-center
+	install -m0644 src/ui/theme.css src/ui/theme-dark.css assets/*.png \
+	  $(DESTDIR)$(FLATPAK_PREFIX)/share/asus-control-center/
+	cd data && find soft-brightness-plus -type f -exec \
+	  install -Dm0644 {} $(DESTDIR)$(FLATPAK_PREFIX)/share/asus-control-center/{} \;
+	# the Soft Brightness Plus schema has to be inside the Flatpak: the
+	# dimming VALUE is written through GSettings, and GSettings writes
+	# reach the host's dconf as long as the schema is known locally.
+	install -d $(DESTDIR)$(FLATPAK_PREFIX)/share/glib-2.0/schemas
+	install -m0644 data/soft-brightness-plus/schemas/*.gschema.xml \
+	  $(DESTDIR)$(FLATPAK_PREFIX)/share/glib-2.0/schemas/
+	glib-compile-schemas $(DESTDIR)$(FLATPAK_PREFIX)/share/glib-2.0/schemas/
+
+flatpak-uninstall:
+	rm -rf $(DESTDIR)$(FLATPAK_PREFIX)
+
+# Source tarball used by the RPM and Debian builds.
 dist:
 	git archive --format=tar.gz --prefix=$(BIN)-$(VERSION)/ \
 	  -o $(BIN)-$(VERSION).tar.gz HEAD
@@ -125,4 +140,4 @@ dist:
 clean:
 	rm -f $(BIN)
 
-.PHONY: test install uninstall dist clean
+.PHONY: test install uninstall install-flatpak flatpak-uninstall dist clean

@@ -580,6 +580,8 @@ st_open_downloads_cb (GtkButton *b, gpointer d)
   GSubprocess *pr = g_subprocess_newv (argv,
       (GSubprocessFlags) (G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_SILENCE), NULL);
   if (pr) g_object_unref (pr);
+  else acc_ui_toast (ST ("This folder cannot be opened from here.",
+                         "لا يمكن فتح هذا المجلد من هنا."));
   g_free (uri); g_free (p);
 }
 

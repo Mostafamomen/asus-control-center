@@ -1,5 +1,5 @@
 Name:           asus-control-center
-Version:        1.2.4
+Version:        1.2.5
 Release:        1%{?dist}
 Summary:        Battery, performance, GPU and display controls for ASUS laptops
 
@@ -61,6 +61,24 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/io.github.asus
 %{_datadir}/asus-control-center/
 
 %changelog
+* Thu Nov 12 2026 Mostafa Momen <mostafamomen6521@gmail.com> - 1.2.5-1
+- ASUSCraft 1.2.5: the Flatpak distribution and the separately packaged
+  host agent (asuscraft-agent).
+- The GUI, the read-only hardware probes and the app's own settings run in
+  a Flatpak; everything that needs the machine itself goes through the
+  host agent.
+- The host agent is a thin, unprivileged, D-Bus-activated session service.
+  It holds no privilege of its own: the whitelist-only helper and the
+  polkit action io.github.asuscontrolcenter.helper are unchanged.
+- The night light now reads and writes the GNOME settings-daemon colour
+  schema (enabled, colour temperature, schedule) and keeps the KDE path.
+- The touchpad uses the desktop's own setting; the obsolete xinput path
+  is gone.
+- The Flatpak asks for six named D-Bus services and one runtime directory:
+  no host filesystem, no device access, no unrestricted bus.
+- Fix a double free in the System Diagnosis SMART check (it aborted the
+  application on start) and one in the night light's error path.
+
 * Mon Nov 03 2026 Mostafa Momen <mostafamomen6521@gmail.com> - 1.0.0-1
 - System Manager: Smart Recommendations, CPU/RAM monitoring, health history
 - System Manager: Quick Actions, improved proc_timer lifecycle

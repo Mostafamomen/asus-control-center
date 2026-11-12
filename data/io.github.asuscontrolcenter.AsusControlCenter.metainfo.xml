@@ -69,14 +69,16 @@
     <keyword>oled</keyword>
   </keywords>
   <releases>
-    <release version="10.2" date="2026-11-04">
+    <release version="1.2.5" date="2026-11-12">
       <description>
-        <p>Cross-desktop-environment support and new Quick Actions.</p>
+        <p>The Flatpak distribution and the separately packaged host agent, with cross-desktop-environment support.</p>
         <ul>
+          <li>ASUSCraft now ships as a Flatpak; the hardware controls and the host commands are reached through the host agent (asuscraft-agent)</li>
+          <li>The host agent is unprivileged: the whitelist-only helper and its polkit action are unchanged</li>
           <li>GNOME 51 and KDE Plasma 6.8 compatibility</li>
-          <li>Night-light toggle works on both GNOME (settings-daemon DBus) and KDE (kwinrc + KWin DBus)</li>
-          <li>Touchpad enable/disable works on GNOME (gsettings) and KDE/X11/Wayland (xinput fallback)</li>
-          <li>Desktop-environment probe cached at startup; greys out unsupported controls automatically</li>
+          <li>The night light reads and writes the GNOME colour schema (enabled, colour temperature, schedule) and keeps the KDE path</li>
+          <li>The touchpad uses the desktop's own setting; the obsolete xinput path is gone</li>
+          <li>The desktop-environment probe is cached at startup and unsupported controls are greyed out automatically</li>
         </ul>
       </description>
     </release>

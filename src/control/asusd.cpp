@@ -7,6 +7,7 @@
  * caller falls back to the polkit helper.
  */
 #include "asusd.h"
+#include "hostcmd.h"
 
 #include <gio/gio.h>
 #include <string.h>
@@ -28,6 +29,7 @@
 #define IFACE_UNIT      "org.freedesktop.systemd1.Unit"
 
 #define ASUS_SHUTDOWN   "asus-shutdown.service"
+#define ASUS_SHUTDOWN_S "asus-shutdown"   /* the short name the command table uses */
 #define CALL_TIMEOUT_MS 2500
 
 /* The system bus connection is a shared, process-wide singleton. Keeping
@@ -281,11 +283,59 @@ acc_asusd_set_profile (AccProfile p, gchar **err)
 
 /* TRUE when asus-shutdown.service is enabled or currently active, i.e.
  * when asusd's queued GPU value will actually be applied at shutdown. */
+/* *known is FALSE when the state could not be read at all (a sandbox
+ * without the host agent cannot see systemd). */
 static gboolean
-shutdown_handler_ready (void)
+shutdown_handler_ready (gboolean *known)
 {
   GError *e = NULL;
   gboolean ready = FALSE;
+
+  if (known)
+    *known = FALSE;
+
+  /* A sandbox cannot reach systemd1 (and it must not be given that: the
+   * systemd bus can start units). The host agent answers the same
+   * question with systemctl. */
+  if (acc_host_agent_ready ())
+    {
+      gchar *out = NULL, *err = NULL;
+      gint code = -1;
+      AccHostHow how = ACC_HOST_UNAVAILABLE;
+      if (acc_host_run (ACC_CMD_SERVICE_ENABLED, ASUS_SHUTDOWN_S, &out, &code,
+                        &how, &err))
+        {
+          gchar *st = g_strstrip (out);
+          ready = g_strcmp0 (st, "enabled") == 0
+               || g_strcmp0 (st, "enabled-runtime") == 0;
+          g_free (out);
+          g_free (err);
+          if (ready)
+            {
+              if (known)
+                *known = TRUE;
+              return TRUE;
+            }
+          out = NULL;
+          err = NULL;
+          if (acc_host_run (ACC_CMD_SERVICE_ACTIVE, ASUS_SHUTDOWN_S, &out,
+                            &code, &how, &err))
+            {
+              gchar *st = g_strstrip (out);
+              ready = g_strcmp0 (st, "active") == 0;
+              g_free (out);
+              g_free (err);
+              if (known)
+                *known = TRUE;
+              return ready;
+            }
+          g_free (out);
+          g_free (err);
+          return FALSE;
+        }
+      g_free (out);
+      g_free (err);
+    }
 
   GVariant *r = call (NAME_SYSTEMD, PATH_SYSTEMD, IFACE_MANAGER,
                       "GetUnitFileState", g_variant_new ("(s)", ASUS_SHUTDOWN),
@@ -297,6 +347,8 @@ shutdown_handler_ready (void)
       ready = g_strcmp0 (st, "enabled") == 0
               || g_strcmp0 (st, "enabled-runtime") == 0;
       g_variant_unref (r);
+      if (known)
+        *known = TRUE;
     }
   g_clear_error (&e);
   if (ready)
@@ -311,6 +363,8 @@ shutdown_handler_ready (void)
       g_clear_error (&e);
       return FALSE;
     }
+  if (known)
+    *known = TRUE;
 
   const gchar *obj = NULL;
   g_variant_get (r, "(&o)", &obj);
@@ -378,7 +432,7 @@ acc_asusd_gpu (AsusdGpuState *out)
   read_possible_mux (d, out);
   g_variant_unref (d);
 
-  out->shutdown_ready = shutdown_handler_ready ();
+  out->shutdown_ready = shutdown_handler_ready (&out->shutdown_known);
   return TRUE;
 }
 

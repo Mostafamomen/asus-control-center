@@ -1,185 +1,266 @@
-/* control/nightlight.cpp - DE-aware night light toggle
+/* control/nightlight.cpp - the night light, on GNOME and on KDE
  * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * GNOME: org.gnome.settings-daemon.plugins.color. The app uses the schema
+ * directly when the machine has it, and asks the host agent when it does
+ * not (a Flatpak has no GNOME colour schema).
+ *
+ * KDE: the NightColor group of kwinrc, written with kwriteconfig and
+ * applied with a KWin reload. Those programs live on the host, so they
+ * run through the host command layer - which means the night light keeps
+ * working inside a Flatpak as well.
+ *
+ * Only the night-light keys are ever touched. Nothing else in the user's
+ * colour or window settings is written.
  */
 #include "nightlight.h"
 #include "../probe/desktop.h"
+#include "agent.h"
+#include "commands.h"
+#include "hostcmd.h"
+#include "nlsettings.h"
+
 #include <gio/gio.h>
 #include <string.h>
 
-#define GNOME_COLOR_SCHEMA "org.gnome.settings-daemon.plugins.color"
-#define GNOME_NL_KEY       "night-light-enabled"
+#define NL_KEY_ENABLED "night-light-enabled"
+#define NL_KEY_TEMP    "night-light-temperature"
+#define NL_KEY_AUTO    "night-light-schedule-automatic"
+#define NL_KEY_FROM    "night-light-schedule-from"
+#define NL_KEY_TO      "night-light-schedule-to"
 
-/* ---- shared GSettings helper ---- */
-static GSettings *
-gs_open_safe (const gchar *schema)
-{
-  GSettingsSchemaSource *src = g_settings_schema_source_get_default ();
-  if (!src)
-    return NULL;
-  GSettingsSchema *s = g_settings_schema_source_lookup (src, schema, TRUE);
-  if (!s)
-    return NULL;
-  GSettings *st = g_settings_new_full (s, NULL, NULL);
-  g_settings_schema_unref (s);
-  return st;
-}
+/* ------------------------------------------------------------- the backend */
 
-/* ---- GNOME backend ---- */
+/* Which desktop owns the night light. The environment is asked first; the
+ * GNOME colour schema is the tie-breaker. */
 static gboolean
-gnome_get (void)
+use_kde (void)
 {
-  GSettings *st = gs_open_safe (GNOME_COLOR_SCHEMA);
-  if (!st)
+  if (acc_desktop_is_kde ())
+    return TRUE;
+  if (acc_desktop_is_gnome ())
     return FALSE;
-  gboolean v = g_settings_get_boolean (st, GNOME_NL_KEY);
-  g_object_unref (st);
-  return v;
+  return FALSE;
 }
 
-static void
-gnome_set (gboolean on)
-{
-  GSettings *st = gs_open_safe (GNOME_COLOR_SCHEMA);
-  if (!st)
-    return;
-  g_settings_set_boolean (st, GNOME_NL_KEY, on);
-  g_object_unref (st);
-}
+/* ----------------------------------------------------------- the GNOME path */
 
-static gboolean
-gnome_available (void)
-{
-  GSettingsSchemaSource *src = g_settings_schema_source_get_default ();
-  if (!src)
-    return FALSE;
-  GSettingsSchema *s = g_settings_schema_source_lookup (src, GNOME_COLOR_SCHEMA, TRUE);
-  if (!s)
-    return FALSE;
-  g_settings_schema_unref (s);
-  return TRUE;
-}
-
-/* ---- KDE backend ---- */
-/* KDE stores night color in ~/.config/kwinrc [NightColor] Active=true/false.
- * We write that via kwriteconfig5/kwriteconfig6 (tries both) and then ask
- * KWin to reload its configuration via DBus so the change takes effect
- * without a restart. */
-
+/* Read the GNOME settings: from the local schema when there is one, from
+ * the host agent otherwise. */
 static gchar *
-find_kwriteconfig (void)
+gnome_read_text (void)
 {
-  static const gchar *bins[] = { "kwriteconfig6", "kwriteconfig5", NULL };
-  for (gint i = 0; bins[i]; i++)
-    {
-      gchar *p = g_find_program_in_path (bins[i]);
-      if (p)
-        return p;
-    }
+  if (acc_nl_available ())
+    return acc_nl_read ();
+
+  gchar *text = NULL;
+  gchar *err = NULL;
+  if (acc_agent_nightlight_get (&text, &err))
+    return text;
+  g_free (text);
+  g_free (err);
   return NULL;
 }
 
 static gboolean
-kde_available (void)
+gnome_write (const gchar *key, const gchar *value, gchar **err)
 {
-  if (!acc_desktop_is_kde ())
-    return FALSE;
-  gchar *p = find_kwriteconfig ();
-  gboolean ok = (p != NULL);
-  g_free (p);
+  if (acc_nl_available ())
+    return acc_nl_write (key, value, err);
+
+  gchar *aerr = NULL;
+  gboolean ok = acc_agent_nightlight_set (key, value, &aerr);
+  if (!ok && err)
+    /* the caller owns its own copy: handing it aerr and freeing aerr
+     * would leave a dangling pointer behind */
+    *err = aerr ? g_strdup (aerr)
+                : g_strdup ("the host agent did not answer");
+  g_free (aerr);
   return ok;
 }
+
+/* ------------------------------------------------------------- the KDE path */
 
 static gboolean
 kde_get (void)
 {
-  /* Read kwinrc directly — kreadconfig5 output parsing is simpler. */
-  static const gchar *readers[] = { "kreadconfig6", "kreadconfig5", NULL };
-  for (gint i = 0; readers[i]; i++)
+  gchar *out = NULL, *err = NULL;
+  gint code = -1;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
+  gboolean ok = acc_host_run (ACC_CMD_NL_KDE_GET, NULL, &out, &code,
+                              &how, &err);
+  g_free (err);
+  if (!ok || !out)
     {
-      gchar *bin = g_find_program_in_path (readers[i]);
-      if (!bin)
-        continue;
-      const gchar *argv[] = { bin, "--file", "kwinrc",
-                               "--group", "NightColor",
-                               "--key", "Active", NULL };
-      gchar *out = NULL;
-      gboolean ok = g_spawn_sync (NULL, (gchar **) argv, NULL,
-                                  G_SPAWN_STDERR_TO_DEV_NULL,
-                                  NULL, NULL, &out, NULL, NULL, NULL);
-      g_free (bin);
-      if (ok && out)
-        {
-          gboolean val = g_ascii_strcasecmp (g_strstrip (out), "true") == 0;
-          g_free (out);
-          return val;
-        }
       g_free (out);
-      break;
+      return FALSE;
     }
-  return FALSE;
+  gboolean val = g_ascii_strcasecmp (g_strstrip (out), "true") == 0;
+  g_free (out);
+  return val;
 }
 
 static void
 kde_set (gboolean on)
 {
-  gchar *kwrite = find_kwriteconfig ();
-  if (!kwrite)
-    return;
+  const gchar *v = on ? "true" : "false";
+  gchar *out = NULL, *err = NULL;
+  gint code = -1;
+  AccHostHow how = ACC_HOST_UNAVAILABLE;
 
-  const gchar *argv[] = { kwrite, "--file", "kwinrc",
-                           "--group", "NightColor",
-                           "--key", "Active",
-                           on ? "true" : "false", NULL };
-  g_spawn_sync (NULL, (gchar **) argv, NULL,
-                (GSpawnFlags) (G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL),
-                NULL, NULL, NULL, NULL, NULL, NULL);
-  g_free (kwrite);
+  acc_host_run (ACC_CMD_NL_KDE_SET, v, &out, &code, &how, &err);
+  g_free (out);
+  g_free (err);
 
-  /* Ask KWin to reload configuration so the change applies immediately. */
-  static const gchar *qdbus[] = { "qdbus6", "qdbus", "qdbus-qt6", "qdbus-qt5", NULL };
-  for (gint i = 0; qdbus[i]; i++)
-    {
-      gchar *qbin = g_find_program_in_path (qdbus[i]);
-      if (!qbin)
-        continue;
-      const gchar *qa[] = { qbin, "org.kde.KWin",
-                             "/ColorCorrect", "setEnabled",
-                             on ? "true" : "false", NULL };
-      g_spawn_async (NULL, (gchar **) qa, NULL,
-                     (GSpawnFlags) (G_SPAWN_STDOUT_TO_DEV_NULL
-                                    | G_SPAWN_STDERR_TO_DEV_NULL),
-                     NULL, NULL, NULL, NULL);
-      g_free (qbin);
-      break;
-    }
+  /* ask KWin to reload its configuration so the change applies at once */
+  acc_host_run (ACC_CMD_NL_KDE_RELOAD, v, &out, &code, &how, &err);
+  g_free (out);
+  g_free (err);
 }
 
-/* ---- public API ---- */
+/* ---------------------------------------------------------------- the API */
+
+AccNightLight
+acc_nightlight_read (void)
+{
+  AccNightLight nl;
+  memset (&nl, 0, sizeof nl);
+
+  if (use_kde ())
+    {
+      nl.available = TRUE;
+      nl.enabled = kde_get ();
+      return nl;
+    }
+
+  gchar *text = gnome_read_text ();
+  if (!text)
+    return nl;                 /* available stays FALSE */
+
+  nl.available = TRUE;
+
+  GKeyFile *kf = g_key_file_new ();
+  if (g_key_file_load_from_data (kf, text, -1, G_KEY_FILE_NONE, NULL))
+    {
+      gchar *v = g_key_file_get_string (kf, "night-light", NL_KEY_ENABLED, NULL);
+      if (v)
+        {
+          nl.enabled = g_strcmp0 (v, "true") == 0;
+          g_free (v);
+        }
+      v = g_key_file_get_string (kf, "night-light", NL_KEY_TEMP, NULL);
+      if (v)
+        {
+          nl.has_temperature = TRUE;
+          nl.temperature = (guint) g_ascii_strtoll (v, NULL, 10);
+          g_free (v);
+        }
+      v = g_key_file_get_string (kf, "night-light", NL_KEY_AUTO, NULL);
+      if (v)
+        {
+          nl.has_schedule = TRUE;
+          nl.schedule_automatic = g_strcmp0 (v, "true") == 0;
+          g_free (v);
+        }
+      else if (g_key_file_has_key (kf, "night-light", "night-light-schedule", NULL))
+        {
+          nl.has_schedule = TRUE;
+          nl.schedule_automatic = FALSE;
+        }
+      v = g_key_file_get_string (kf, "night-light", NL_KEY_FROM, NULL);
+      if (v)
+        {
+          nl.schedule_from = g_ascii_strtod (v, NULL);
+          g_free (v);
+        }
+      v = g_key_file_get_string (kf, "night-light", NL_KEY_TO, NULL);
+      if (v)
+        {
+          nl.schedule_to = g_ascii_strtod (v, NULL);
+          g_free (v);
+        }
+    }
+  g_key_file_free (kf);
+  g_free (text);
+  return nl;
+}
+
+gboolean
+acc_nightlight_write_enabled (gboolean on)
+{
+  if (use_kde ())
+    {
+      kde_set (on);
+      return TRUE;
+    }
+  gchar *err = NULL;
+  gboolean ok = gnome_write (NL_KEY_ENABLED, on ? "true" : "false", &err);
+  g_free (err);
+  return ok;
+}
+
+gboolean
+acc_nightlight_write_temperature (guint kelvin)
+{
+  if (use_kde ())
+    return FALSE;             /* KDE has no colour temperature setting */
+  if (kelvin < 1700 || kelvin > 4700)
+    return FALSE;
+  gchar *v = g_strdup_printf ("%u", kelvin);
+  gchar *err = NULL;
+  gboolean ok = gnome_write (NL_KEY_TEMP, v, &err);
+  g_free (err);
+  g_free (v);
+  return ok;
+}
+
+gboolean
+acc_nightlight_write_schedule (gboolean automatic, gdouble from, gdouble to)
+{
+  if (use_kde ())
+    return FALSE;
+  gchar *err = NULL;
+  gboolean ok = TRUE;
+
+  if (automatic)
+    {
+      ok = gnome_write (NL_KEY_AUTO, "true", &err);
+    }
+  else
+    {
+      ok = gnome_write (NL_KEY_AUTO, "false", &err);
+      if (ok)
+        {
+          gchar *f = g_strdup_printf ("%g", from);
+          gchar *t = g_strdup_printf ("%g", to);
+          ok = gnome_write (NL_KEY_FROM, f, &err)
+               && gnome_write (NL_KEY_TO, t, &err);
+          g_free (f);
+          g_free (t);
+        }
+    }
+  g_free (err);
+  return ok;
+}
+
+/* --------------------------------------------------------- the older API */
+
 gboolean
 acc_nightlight_available (void)
 {
-  if (acc_desktop_is_gnome ())
-    return gnome_available ();
-  if (acc_desktop_is_kde ())
-    return kde_available ();
-  return FALSE;
+  AccNightLight nl = acc_nightlight_read ();
+  return nl.available;
 }
 
 gboolean
 acc_nightlight_get (void)
 {
-  if (acc_desktop_is_gnome ())
-    return gnome_get ();
-  if (acc_desktop_is_kde ())
-    return kde_get ();
-  return FALSE;
+  AccNightLight nl = acc_nightlight_read ();
+  return nl.available ? nl.enabled : FALSE;
 }
 
 void
 acc_nightlight_set (gboolean on)
 {
-  if (acc_desktop_is_gnome ())
-    gnome_set (on);
-  else if (acc_desktop_is_kde ())
-    kde_set (on);
+  acc_nightlight_write_enabled (on);
 }

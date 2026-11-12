@@ -100,7 +100,7 @@ card_head (const gchar *icon, AccStr title)
 static GtkWidget *
 card (const gchar *icon, AccStr title, GtkWidget **out_body)
 {
-  GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+  GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
   gtk_widget_add_css_class (box, "card");
   GtkWidget *head = card_head (icon, title);
   gtk_box_append (GTK_BOX (box), head);
@@ -130,20 +130,20 @@ static GtkWidget *
 card_battery (AccUI *u)
 {
   GtkWidget *c = card ("battery-symbolic", ACC_T_CARD_BATTERY, NULL);
-  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
-
+  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
+ 
   /* ring + caption + three stat rows */
-  GtkWidget *top = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 14);
-  GtkWidget *ringcol = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
+  GtkWidget *top = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *ringcol = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
   u->ring_bat = ACC_RING (acc_ring_new (acc_theme_col_accent ()));
-  gtk_widget_set_size_request (GTK_WIDGET (u->ring_bat), 128, 128);
+  gtk_widget_set_size_request (GTK_WIDGET (u->ring_bat), 84, 84);
   gtk_box_append (GTK_BOX (ringcol), GTK_WIDGET (u->ring_bat));
   u->bat_small = lbl ("", "dim", 0);
   gtk_widget_set_halign (u->bat_small, GTK_ALIGN_CENTER);
   gtk_box_append (GTK_BOX (ringcol), u->bat_small);
   gtk_box_append (GTK_BOX (top), ringcol);
 
-  GtkWidget *right = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
+  GtkWidget *right = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
   gtk_widget_set_valign (right, GTK_ALIGN_CENTER);
   gtk_box_append (GTK_BOX (right),
                   stat_row ("battery-symbolic", NULL, &u->bat_wh_now));
@@ -189,7 +189,7 @@ static GtkWidget *
 card_gpu (AccUI *u)
 {
   GtkWidget *c = card ("video-display-symbolic", ACC_T_CARD_GPU, NULL);
-  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
+  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
 
   /* logo block + name + mode pill: the badge follows the real GPU vendor
    * (NVIDIA / AMD / Intel), read from PCI ids — never a model list */
@@ -203,7 +203,7 @@ card_gpu (AccUI *u)
     case ACC_GPU_INTEL:  gtk_widget_add_css_class (nv, "brand-intel");  break;
     default: break;
     }
-  gtk_widget_set_size_request (nv, 46, 46);
+  gtk_widget_set_size_request (nv, 38, 38);
   {
     /* vendor mark as an image instead of a text badge */
     const gchar *vasset = gpu_vendor_asset ();
@@ -211,17 +211,17 @@ card_gpu (AccUI *u)
     GtkWidget *nim;
     if (npath)
       {
-        nim = gtk_picture_new ();
-        gtk_picture_set_filename (GTK_PICTURE (nim), npath);
-        gtk_picture_set_content_fit (GTK_PICTURE (nim),
-                                     GTK_CONTENT_FIT_CONTAIN);
-        gtk_picture_set_can_shrink (GTK_PICTURE (nim), TRUE);
-        gtk_widget_set_size_request (nim, 30, 30);
+        /* GtkPicture keeps the file's natural size (the vendor marks are
+         * 256x256 PNGs), so a size *request* alone would let the logo
+         * overflow the 38px badge.  GtkImage honours the pixel size as a
+         * hard natural size, which keeps the badge at 24x24. */
+        nim = gtk_image_new_from_file (npath);
+        gtk_image_set_pixel_size (GTK_IMAGE (nim), 24);
       }
     else
       {
         nim = gtk_image_new_from_icon_name ("video-display-symbolic");
-        gtk_image_set_pixel_size (GTK_IMAGE (nim), 22);
+        gtk_image_set_pixel_size (GTK_IMAGE (nim), 18);
       }
     g_free (npath);
     gtk_widget_set_halign (nim, GTK_ALIGN_CENTER);
@@ -318,7 +318,7 @@ static GtkWidget *
 card_oled (AccUI *u)
 {
   GtkWidget *c = card ("display-brightness-symbolic", ACC_T_CARD_OLED, NULL);
-  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
+  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
 
   /* 1. brightness: label + percentage on one line, slider below it */
   {
@@ -391,7 +391,7 @@ static GtkWidget *
 card_sys (AccUI *u)
 {
   GtkWidget *c = card ("dialog-information-symbolic", ACC_T_CARD_SYS, NULL);
-  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 9);
+  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
   gtk_box_append (GTK_BOX (li),
                   stat_simple (acc_tr (ACC_T_SYS_OS), &u->sys_os,
                                "applications-science-symbolic"));
@@ -413,12 +413,12 @@ static GtkWidget *
 card_fans (AccUI *u)
 {
   GtkWidget *c = card ("applications-system-symbolic", ACC_T_CARD_FANS, NULL);
-  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
+  GtkWidget *li = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
 
   GtkWidget *top = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 14);
   GtkWidget *fcol = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
   u->ring_fan = ACC_RING (acc_ring_new (acc_theme_col_warn ()));
-  gtk_widget_set_size_request (GTK_WIDGET (u->ring_fan), 112, 112);
+  gtk_widget_set_size_request (GTK_WIDGET (u->ring_fan), 84, 84);
   gtk_box_append (GTK_BOX (fcol), GTK_WIDGET (u->ring_fan));
   u->fan_small = lbl (acc_tr (ACC_T_SYS_TEMP), "dim", 0);
   gtk_widget_set_halign (u->fan_small, GTK_ALIGN_CENTER);
@@ -450,37 +450,6 @@ card_fans (AccUI *u)
 /* ------------------------------------------------------------------ */
 /* MyASUS-style home band                                              */
 /* ------------------------------------------------------------------ */
-
-static void
-copy_serial (GtkButton *b, gpointer user)
-{
-  GdkClipboard *cb = gtk_widget_get_clipboard (GTK_WIDGET (b));
-  gdk_clipboard_set_text (cb, (const gchar *) user);
-}
-
-static GtkWidget *
-feat_row (const gchar *icon, const gchar *text, const gchar *page)
-{
-  GtkWidget *b = gtk_button_new ();
-  gtk_widget_add_css_class (b, "featrow");
-  GtkWidget *h = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
-  GtkWidget *im = gtk_image_new_from_icon_name (icon);
-  gtk_image_set_pixel_size (GTK_IMAGE (im), 16);
-  gtk_widget_set_valign (im, GTK_ALIGN_CENTER);
-  GtkWidget *t = lbl (text, NULL, 0);
-  gtk_widget_set_hexpand (t, TRUE);
-  gtk_widget_set_valign (t, GTK_ALIGN_CENTER);
-  gtk_box_append (GTK_BOX (h), im);
-  gtk_box_append (GTK_BOX (h), t);
-  {
-    GtkWidget *nx = gtk_image_new_from_icon_name ("go-next-symbolic");
-    gtk_widget_set_valign (nx, GTK_ALIGN_CENTER);
-    gtk_box_append (GTK_BOX (h), nx);
-  }
-  gtk_button_set_child (GTK_BUTTON (b), h);
-  g_signal_connect (b, "clicked", G_CALLBACK (nav_btn), (gpointer) page);
-  return b;
-}
 
 /* Pick the laptop picture that matches this machine's model, if one exists.
  * Falls back to the generic "laptop.png" when no specific image is found. */
@@ -560,6 +529,7 @@ lap_mock (AccUI *u)
   GtkWidget *af = gtk_aspect_frame_new (0.5, 0.5, 940.0 / 600.0, TRUE);
   gtk_widget_set_hexpand (af, TRUE);
   gtk_widget_set_valign (af, GTK_ALIGN_CENTER);
+  gtk_widget_set_size_request (af, 260, -1);
   gtk_aspect_frame_set_child (GTK_ASPECT_FRAME (af), ov);
 
   return af;
@@ -576,49 +546,32 @@ acc_home_build (AccUI *u)
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroll),
                                   GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 
-  GtkWidget *page = gtk_box_new (GTK_ORIENTATION_VERTICAL, 14);
+  GtkWidget *page = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
   gtk_widget_set_name (page, "page");
-  gtk_widget_set_margin_top (page, 14);
-  gtk_widget_set_margin_bottom (page, 16);
-  gtk_widget_set_margin_start (page, 20);
-  gtk_widget_set_margin_end (page, 20);
+  gtk_widget_set_margin_top (page, 8);
+  gtk_widget_set_margin_bottom (page, 8);
+  gtk_widget_set_margin_start (page, 12);
+  gtk_widget_set_margin_end (page, 12);
 
   /* ---- hero band: VivoBook title + serial + Featured card ---- */
-  GtkWidget *hero = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 24);
+  GtkWidget *hero = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_widget_add_css_class (hero, "achero");
   gtk_widget_set_name (hero, "hero");
   {
-    GtkWidget *hcol = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget *hcol = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
     gtk_widget_set_name (hcol, "hcol");
     gtk_widget_set_valign (hcol, GTK_ALIGN_CENTER);
     gtk_widget_set_hexpand (hcol, TRUE);
     gchar *model = dmi_product_name ();
     GtkWidget *title = lbl (model, "hero-title", 0);
     gtk_label_set_ellipsize (GTK_LABEL (title), PANGO_ELLIPSIZE_END);
-    gtk_label_set_max_width_chars (GTK_LABEL (title), 34);
+    gtk_label_set_max_width_chars (GTK_LABEL (title), 28);
     g_free (model);
     gtk_box_append (GTK_BOX (hcol), title);
 
-    /* serial number row (root-only file; "—" when unreadable) */
-    GtkWidget *srow = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-    gchar *serial = acc_read_trim ("/sys/class/dmi/id/product_serial");
-    gtk_box_append (GTK_BOX (srow), lbl (acc_tr (ACC_T_SERIAL), "foot", 0));
-    GtkWidget *sval = lbl (serial && *serial ? serial : "—", "serialval", 0);
-    gtk_box_append (GTK_BOX (srow), sval);
-    if (serial && *serial)
-      {
-        GtkWidget *cp = gtk_button_new_from_icon_name ("edit-copy-symbolic");
-        gtk_widget_add_css_class (cp, "flat");
-        gtk_widget_set_tooltip_text (cp, acc_tr (ACC_T_TT_COPY));
-        /* the button owns the serial string for the copy callback */
-        g_signal_connect (cp, "clicked", G_CALLBACK (copy_serial), serial);
-        g_object_set_data_full (G_OBJECT (cp), "serial", serial, g_free);
-        gtk_box_append (GTK_BOX (srow), cp);
-      }
-    gtk_box_append (GTK_BOX (hcol), srow);
-
     /* system info row: label + flat "more details" nav button */
-    GtkWidget *irow = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);    gtk_box_append (GTK_BOX (irow), lbl (acc_tr (ACC_T_CARD_SYS), "foot", 0));
+    GtkWidget *irow = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (irow), lbl (acc_tr (ACC_T_CARD_SYS), "foot", 0));
     GtkWidget *more = gtk_button_new_with_label (acc_tr (ACC_T_SYS_MORE));
     gtk_widget_add_css_class (more, "primarybtn");
     g_signal_connect (more, "clicked", G_CALLBACK (nav_btn), (gpointer) "system");
@@ -633,30 +586,13 @@ acc_home_build (AccUI *u)
 
     /* device pictogram with live battery % — the MyASUS home banner */
     gtk_box_append (GTK_BOX (hero), lap_mock (u));
-
-    /* Featured: honest quick links into this app's pages */
-    GtkWidget *fc = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
-    gtk_widget_add_css_class (fc, "featcard");
-    gtk_widget_set_size_request (fc, 300, -1);
-    gtk_widget_set_valign (fc, GTK_ALIGN_CENTER);
-    gtk_box_append (GTK_BOX (fc), lbl (acc_tr (ACC_T_FEATURED),
-                                       "overline", 0));
-    gtk_box_append (GTK_BOX (fc), feat_row ("display-brightness-symbolic",
-                                            acc_tr (ACC_T_NAV_DISP),
-                                            "display"));
-    gtk_box_append (GTK_BOX (fc), feat_row ("video-display-symbolic",
-                                            acc_tr (ACC_T_NAV_GPU), "gpu"));
-    gtk_box_append (GTK_BOX (fc), feat_row ("applications-system-symbolic",
-                                            acc_tr (ACC_T_NAV_FANS),
-                                            "performance"));
-    gtk_box_append (GTK_BOX (hero), fc);
   }
   gtk_box_append (GTK_BOX (page), hero);
 
   /* cards grid: 3 × 2 — battery, GPU, display; system + wide fans card */
   GtkWidget *grid = gtk_grid_new ();
-  gtk_grid_set_column_spacing (GTK_GRID (grid), 14);
-  gtk_grid_set_row_spacing (GTK_GRID (grid), 14);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 8);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 8);
   gtk_grid_set_column_homogeneous (GTK_GRID (grid), TRUE);
 
   gtk_grid_attach (GTK_GRID (grid), card_battery (u), 0, 0, 1, 1);

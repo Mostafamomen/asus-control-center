@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #include "gfx.h"
+#include "hostcmd.h"
 #include "../probe/probe.h"
 #include "../probe/devs.h"
 
@@ -47,6 +48,26 @@ nvidia_pci_dir (void)
 static gboolean
 supergfxd_owned (void)
 {
+  /* A sandbox must not be given the supergfxctl bus name: the agent
+   * answers the same question with systemctl. */
+  if (acc_host_agent_ready ())
+    {
+      gchar *out = NULL, *err = NULL;
+      gint code = -1;
+      AccHostHow how = ACC_HOST_UNAVAILABLE;
+      if (acc_host_run (ACC_CMD_SERVICE_ACTIVE, "supergfxd", &out, &code,
+                        &how, &err))
+        {
+          gboolean active = g_strcmp0 (g_strstrip (out), "active") == 0;
+          g_free (out);
+          g_free (err);
+          return active;
+        }
+      g_free (out);
+      g_free (err);
+      return FALSE;
+    }
+
   GDBusConnection *bus = g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL, NULL);
   if (!bus)
     return FALSE;

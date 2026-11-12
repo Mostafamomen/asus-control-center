@@ -1,0 +1,132 @@
+name: CI
+
+# The application, the host agent, the release metadata and the version
+# policy. Everything here is cheap: no Flatpak build (that is its own
+# workflow), no package download.
+#
+# The packages themselves are built by the "Packages" workflow.
+
+on:
+  push:
+    branches: [main, release/**]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  application:
+    name: Application (Fedora)
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install the build dependencies
+        run: dnf install -y gcc-c++ make pkgconf gtk4-devel libadwaita-devel
+      - uses: actions/checkout@v4
+      - name: Build with the warnings as errors
+        run: make CXXFLAGS="-O2 -g -Wall -Wextra -Werror"
+      - name: The logic gate
+        run: ./asus-control-center --check
+      - name: The read-only hardware report
+        run: ./asus-control-center --self-test
+      - name: The desktop file is valid
+        run: |
+          desktop-file-validate data/io.github.asuscontrolcenter.AsusControlCenter.desktop.in || \
+          echo "note: the desktop file is a template (@BIN@); the packaged one is validated by the Packages workflow"
+
+  agent:
+    name: Host Agent (Fedora)
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install the build dependencies
+        run: dnf install -y gcc-c++ make pkgconf glib2-devel
+      - uses: actions/checkout@v4
+      - name: Build with the warnings as errors
+        run: make -C agent CXXFLAGS="-O2 -g -Wall -Wextra -Werror"
+      - name: The agent's logic gate
+        run: ./agent/asuscraft-agent --check
+      - name: The D-Bus activation metadata
+        run: |
+          set -eu
+          svc=agent/io.github.asuscontrolcenter.Agent.service.in
+          test -f "$svc"
+          grep -q '^Name=io.github.asuscontrolcenter.Agent$' "$svc"
+          grep -q '^Exec=@EXEC@$' "$svc"
+          # the name in the activation file must be the name the app asks for
+          grep -q '#define ACC_AGENT_BUS_NAME "io.github.asuscontrolcenter.Agent"' src/control/agentproto.h
+          # the rendered file must point at the installed location
+          sed 's|@EXEC@|/usr/libexec/asuscraft-agent/asuscraft-agent|' "$svc" \
+            | grep -q '^Exec=/usr/libexec/asuscraft-agent/asuscraft-agent$'
+          echo "ok: the activation file matches the protocol header and the install path"
+      - name: The polkit action is unchanged
+        run: |
+          set -eu
+          # the helper and the policy must be byte-identical to the audited ones
+          test "$(sha256sum data/acc-helper | cut -d' ' -f1)" = \
+               "38b1ca77fa26b6720981edf7797f13faa4bdb692bf4c840a658a7c1c93ada799"
+          test "$(sha256sum data/io.github.asuscontrolcenter.AsusControlCenter.policy | cut -d' ' -f1)" = \
+               "eaa44a834cb067193f24294a8cd2b4d185406df9f8c5ea76f837f69016a9b2a5"
+          grep -q 'action id="io.github.asuscontrolcenter.helper"' \
+            data/io.github.asuscontrolcenter.AsusControlCenter.policy
+          echo "ok: the polkit action id is io.github.asuscontrolcenter.helper"
+      - name: The helper's whitelist is unchanged
+        run: |
+          set -eu
+          bash -n data/acc-helper
+          # the five verbs and their values, exactly as audited
+          for verb in set-perf set-charge set-charge-mode set-gpu-mux set-kbd; do
+            grep -q "^  $verb)" data/acc-helper
+          done
+          echo "ok: the helper still accepts exactly the five audited verbs"
+
+  metadata:
+    name: Release metadata and versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every version source agrees
+        run: ./flatpak/verify-versions.sh 1.2.5
+      - name: The Flatpak asks for exactly the reviewed permissions
+        run: ./flatpak/verify-permissions.sh
+      - name: The Flatpak manifest is valid YAML with the expected fields
+        run: |
+          set -eu
+          python3 -c "
+          import yaml, sys
+          d = yaml.safe_load(open('flatpak/io.github.asuscontrolcenter.asuscraft.yml'))
+          assert d['app-id'] == 'io.github.asuscontrolcenter.asuscraft', d['app-id']
+          assert d['runtime'] == 'org.gnome.Platform'
+          assert d['sdk'] == 'org.gnome.Sdk'
+          assert d['command'] == 'asus-control-center'
+          assert 'modules' in d and d['modules']
+          print('ok: the manifest parses and its identity is right')
+          "
+      - name: The RPM specifications parse and carry the right files
+        run: |
+          set -eu
+          sudo dnf install -y rpm-build
+          for spec in packaging/rpm/asus-control-center.spec packaging/rpm/asuscraft-agent.spec; do
+            rpmspec -q --qf '%{name} %{version}-%{release}\n' "$spec"
+            rpmspec -q --list "$spec" >/dev/null
+          done
+          rpmspec -q --qf '%{name} %{version}\n' packaging/rpm/asuscraft-agent.spec | grep -q 'asuscraft-agent 1.2.5'
+          echo "ok: both specifications parse and the agent package is 1.2.5"
+      - name: The Debian metadata agrees
+        run: |
+          set -eu
+          version=$(sed -n '1s/.*(\([^)-]*\)).*/\1/p' debian/changelog)
+          test "$version" = "1.2.5"
+          grep -q '^Source: asus-control-center$' debian/control
+          grep -q 'libadwaita-1-dev (>= 1.5)' debian/control
+          echo "ok: debian/changelog says $version and the build dependencies are declared"
+      - name: No credentials in the tree
+        run: |
+          set -eu
+          if git grep -InE "(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)" -- . \
+             | grep -v "^docs/"; then
+            echo "FAIL: a credential pattern is in the tree"; exit 1
+          fi
+          echo "ok: no credential patterns in the tracked files"
